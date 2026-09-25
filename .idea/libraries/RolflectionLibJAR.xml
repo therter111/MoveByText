@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="RolflectionLibJAR">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../RolflectionLib-SS-main/jars/RolflectionLibJAR.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../RolflectionLib-SS-main/jars/RolflectionLibJAR.jar!/" />
+    </SOURCES>
+  </library>
+</component>
