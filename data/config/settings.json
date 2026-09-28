@@ -20,7 +20,10 @@
 	#}
 
 	"plugins": {
-	"TitleDebug": "KirizsKeve.MoveByText.TitleDebugScreenPlugin"
+	"TitleDebug": "KirizsKeve.MoveByText.TitleDebugScreenPlugin",
+	"TitleCountScreen": "KirizsKeve.MoveByText.TitleCountScreenPlugin",
+	"TitleTextFieldScreen": "KirizsKeve.MoveByText.TitleTextFieldScreenPlugin",
+	"TitleMultiLineScreen": "KirizsKeve.MoveByText.TitleMultiLineScreenPlugin"
 }
 
 

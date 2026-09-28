@@ -22,6 +22,7 @@
     </CLASSES>
     <JAVADOC>
       <root url="https://starsectorcommunityapidocs.github.io/CommunityApiDocs/" />
+      <root url="https://starsectorcommunityapidocs.github.io/CommunityApiDocs" />
     </JAVADOC>
     <SOURCES>
       <root url="jar://$PROJECT_DIR$/../../starsector-core/jaxb-api-2.4.0-b180830.0359-sources.jar!/" />
