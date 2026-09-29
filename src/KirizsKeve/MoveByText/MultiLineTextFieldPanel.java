@@ -6,9 +6,13 @@ import java.util.List;
 import org.lwjgl.input.Keyboard;
 
 import com.fs.starfarer.api.input.InputEventAPI;
+import com.fs.starfarer.api.ui.Alignment;
+import com.fs.starfarer.api.ui.ButtonAPI;
+import com.fs.starfarer.api.ui.CutStyle;
 import com.fs.starfarer.api.ui.LabelAPI;
 import com.fs.starfarer.api.ui.TextFieldAPI;
 import com.fs.starfarer.api.ui.TooltipMakerAPI;
+import com.fs.starfarer.api.ui.TooltipMakerAPI.ActionListenerDelegate;
 import com.fs.starfarer.api.util.Misc;
 
 public class MultiLineTextFieldPanel extends CustomPanel {
@@ -21,9 +25,13 @@ public class MultiLineTextFieldPanel extends CustomPanel {
 
     private static final float MAX_WIDTH = 280f;
 
+    /** 1. Unique ID for our send button */
+    private static final Object SEND_BTN = new Object();
+
     public MultiLineTextFieldPanel() {
         super(320f, 400f);
         System.out.println("Látja");
+
         /** We use withScroller = true so that if the user types 50 lines, it automatically creates a scrollbar */
         final TooltipMakerAPI content = getTooltip(300f, 400f, true);
 
@@ -35,7 +43,53 @@ public class MultiLineTextFieldPanel extends CustomPanel {
         /** The active typing line */
         textField = content.addTextField(MAX_WIDTH, 5f);
 
+        /** 2. Set up the Action Listener BEFORE creating the button */
+        content.setActionListenerDelegate(new ActionListenerDelegate() {
+            @Override
+            public void actionPerformed(Object data, Object src) {
+                if (src instanceof ButtonAPI btn && btn.getCustomData() == SEND_BTN) {
+                    onSendClicked();
+                }
+            }
+        });
+
+        /** 3. Add the Send Button right below the active typing line */
+        content.addButton(
+                "Send",                             // Text on the button
+                SEND_BTN,                           // Custom Data ID
+                Misc.getBasePlayerColor(),          // Text/Border color
+                Misc.getDarkPlayerColor(),          // Background color
+                Alignment.MID,                      // Text alignment
+                CutStyle.ALL,                       // Corner cut style
+                100f,                               // Width
+                25f,                                // Height
+                15f                                 // Pad (gap above button)
+        );
+
         add(content);
+        updateDisplay();
+    }
+
+    /** 4. Define what happens when the button is pressed */
+    private void onSendClicked() {
+        // Gather everything the user typed (past lines + whatever is currently in the text field)
+        List<String> fullText = new ArrayList<>(pastLines);
+        if (textField != null && !textField.getText().trim().isEmpty()) {
+            fullText.add(textField.getText());
+        }
+
+        String combinedText = String.join("\n", fullText);
+
+        // Pass the result to the Mod Plugin to handle the file writing
+        MoveByTextImpl.writeSubmittedTextToTerminal(combinedText);
+
+        // Clear the text box and the confirmed lines so the user can start fresh
+        pastLines.clear();
+        if (textField != null) {
+            textField.setText("");
+        }
+
+        // Update the visual display to reflect the cleared text
         updateDisplay();
     }
 

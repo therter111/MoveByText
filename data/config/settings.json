@@ -20,8 +20,8 @@
 	#}
 
 	"plugins": {
-	"TitleTextFieldScreen": "KirizsKeve.MoveByText.TitleTextFieldScreenPlugin",
-	"TitleMultiLineScreen": "KirizsKeve.MoveByText.TitleMultiLineScreenPlugin"
+	#"TitleTextFieldScreen": "KirizsKeve.MoveByText.TitleTextFieldScreenPlugin",
+	#"TitleMultiLineScreen": "KirizsKeve.MoveByText.TitleMultiLineScreenPlugin"
 }
 
 
