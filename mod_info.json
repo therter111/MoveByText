@@ -4,7 +4,7 @@
   "author": "Kirizs Kece",
   "utility": false,
   "version": { "major": '0', "minor": '1', "patch": '0' },
-  "description": "Starsector IntelliJ template.",
+  "description": "Starsector NLP mod.",
   "gameVersion": "0.98a-RC8",
   "jars": [ "jars/MoveByText.jar" ],
   "modPlugin": "KirizsKeve.MoveByText.MoveByTextImpl",
