@@ -34,8 +34,6 @@ public class MoveByTextImpl extends BaseModPlugin {
         System.out.println(text);
         System.out.println("===========================\n");
 
-        // 2. Also prints to starsector-core/starsector.log
-        Global.getLogger(MoveByTextImpl.class).info("UI Text Submitted:\n" + text);
     }
 
 

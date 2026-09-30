@@ -17,150 +17,176 @@ import com.fs.starfarer.api.util.Misc;
 
 public class MultiLineTextFieldPanel extends CustomPanel {
 
-    private TextFieldAPI textField;
-    private LabelAPI displayLabel;
+    /** Unique ID for our toggle button */
+    private static final Object TOGGLE_BTN = new Object();
 
-    private List<String> pastLines = new ArrayList<>();
-    private String lastText = "";
-
-    private static final float MAX_WIDTH = 280f;
-
-    /** 1. Unique ID for our send button */
-    private static final Object SEND_BTN = new Object();
+    private boolean isEditorVisible = false;
+    private TooltipMakerAPI toggleTooltip;
+    private EditorPanel editorPanel;
 
     public MultiLineTextFieldPanel() {
-        super(320f, 400f);
-        System.out.println("Látja");
+        super(320f, 440f);
 
-        /** We use withScroller = true so that if the user types 50 lines, it automatically creates a scrollbar */
-        final TooltipMakerAPI content = getTooltip(300f, 400f, true);
-
-        content.addTitle("Multi-line Text Editor", Misc.getBasePlayerColor());
-
-        /** This label holds all previously confirmed lines */
-        displayLabel = content.addPara("", 10f);
-
-        /** The active typing line */
-        textField = content.addTextField(MAX_WIDTH, 5f);
-
-        /** 2. Set up the Action Listener BEFORE creating the button */
-        content.setActionListenerDelegate(new ActionListenerDelegate() {
+        // Create a separate tooltip to house just the toggle button
+        toggleTooltip = getTooltip(320f, 40f, false);
+        toggleTooltip.setActionListenerDelegate(new ActionListenerDelegate() {
             @Override
             public void actionPerformed(Object data, Object src) {
-                if (src instanceof ButtonAPI btn && btn.getCustomData() == SEND_BTN) {
-                    onSendClicked();
+                if (src instanceof ButtonAPI btn && btn.getCustomData() == TOGGLE_BTN) {
+                    onToggleClicked();
                 }
             }
         });
 
-        /** 3. Add the Send Button right below the active typing line */
-        content.addButton(
-                "Send",                             // Text on the button
-                SEND_BTN,                           // Custom Data ID
-                Misc.getBasePlayerColor(),          // Text/Border color
-                Misc.getDarkPlayerColor(),          // Background color
-                Alignment.MID,                      // Text alignment
-                CutStyle.ALL,                       // Corner cut style
-                100f,                               // Width
-                25f,                                // Height
-                15f                                 // Pad (gap above button)
+        // Add the toggle button
+        toggleTooltip.addButton(
+                "Toggle Editor", TOGGLE_BTN,
+                Misc.getBasePlayerColor(), Misc.getDarkPlayerColor(),
+                Alignment.MID, CutStyle.ALL, 120f, 25f, 0f
         );
 
-        add(content);
-        updateDisplay();
+        // Anchor the toggle button tooltip to the top left of the main panel
+        add(toggleTooltip).inTL(0f, 0f);
+
+        // Initialize the actual editor panel, but do NOT add() it to the UI tree yet.
+        editorPanel = new EditorPanel();
     }
 
-    /** 4. Define what happens when the button is pressed */
-    private void onSendClicked() {
-        // Gather everything the user typed (past lines + whatever is currently in the text field)
-        List<String> fullText = new ArrayList<>(pastLines);
-        if (textField != null && !textField.getText().trim().isEmpty()) {
-            fullText.add(textField.getText());
-        }
+    private void onToggleClicked() {
+        isEditorVisible = !isEditorVisible;
 
-        String combinedText = String.join("\n", fullText);
-
-        // Pass the result to the Mod Plugin to handle the file writing
-        MoveByTextImpl.writeSubmittedTextToTerminal(combinedText);
-
-        // Clear the text box and the confirmed lines so the user can start fresh
-        pastLines.clear();
-        if (textField != null) {
-            textField.setText("");
-        }
-
-        // Update the visual display to reflect the cleared text
-        updateDisplay();
-    }
-
-    @Override
-    public void processInput(List<InputEventAPI> events) {
-        if (textField == null) return;
-
-        for (InputEventAPI event : events) {
-            /**
-             * We ignore event.isConsumed() here because TextFieldAPI processes inputs first.
-             * If we skipped consumed events, we wouldn't be able to detect backspaces. 
-             */
-            if (event.isKeyboardEvent() && event.isKeyDownEvent()) {
-                int key = event.getEventValue();
-
-                if (key == Keyboard.KEY_RETURN) {
-                    /** User pressed Enter: submit current line and clear the active text field */
-                    pastLines.add(textField.getText());
-                    textField.setText("");
-                    updateDisplay();
-                    event.consume();
-                }
-                else if (key == Keyboard.KEY_BACK) {
-                    /**
-                     * User pressed Backspace.
-                     * We use `lastText` instead of `textField.getText()` to check if it was empty 
-                     * BEFORE this frame. This prevents deleting a character AND popping a line simultaneously. 
-                     */
-                    if (lastText.isEmpty() && !pastLines.isEmpty()) {
-                        String popped = pastLines.remove(pastLines.size() - 1);
-                        textField.setText(popped);
-                        updateDisplay();
-                        event.consume();
-                    }
-                }
-            }
-        }
-    }
-
-    @Override
-    public void advance(float delta) {
-        if (textField != null) {
-            /** Cache the text state for the next frame's Backspace logic */
-            lastText = textField.getText();
-        }
-    }
-
-    private void updateDisplay() {
-        if (pastLines.isEmpty()) {
-            displayLabel.setText("");
-            displayLabel.getPosition().setSize(MAX_WIDTH, 0f);
+        if (isEditorVisible) {
+            add(editorPanel).inTL(0f, 35f);
         } else {
-            /** Reconstruct the past lines using line breaks */
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < pastLines.size(); i++) {
-                sb.append(pastLines.get(i));
-                if (i < pastLines.size() - 1) sb.append("\n");
-            }
-            displayLabel.setText(sb.toString());
-            displayLabel.autoSizeToWidth(MAX_WIDTH);
+            remove(editorPanel);
         }
-
-        /**
-         * CORRECTED: Trigger a position update to push the text field down.
-         * Since PositionAPI lacks recompute(), we force it by re-applying its current size.
-         */
-        float currentWidth = textField.getPosition().getWidth();
-        float currentHeight = textField.getPosition().getHeight();
-        textField.getPosition().setSize(currentWidth, currentHeight);
     }
 
     @Override public void renderBelow(float alpha) {}
     @Override public void render(float alpha) {}
+    @Override public void advance(float delta) {}
+    @Override public void processInput(List<InputEventAPI> events) {}
+
+    // -------------------------------------------------------------
+    // Nested CustomPanel class that encapsulates the editor's UI.
+    // -------------------------------------------------------------
+    private static class EditorPanel extends CustomPanel {
+        private TextFieldAPI textField;
+        private LabelAPI displayLabel;
+        private ButtonAPI sendButton; // NEW: Track the Send Button
+
+        private List<String> pastLines = new ArrayList<>();
+        private String lastText = "";
+
+        private static final float MAX_WIDTH = 280f;
+        private static final Object SEND_BTN = new Object();
+
+        public EditorPanel() {
+            super(320f, 400f);
+
+            final TooltipMakerAPI content = getTooltip(300f, 400f, true);
+            content.addTitle("Multi-line Text Editor", Misc.getBasePlayerColor());
+
+            displayLabel = content.addPara("", 10f);
+            textField = content.addTextField(MAX_WIDTH, 5f);
+
+            content.setActionListenerDelegate(new ActionListenerDelegate() {
+                @Override
+                public void actionPerformed(Object data, Object src) {
+                    if (src instanceof ButtonAPI btn && btn.getCustomData() == SEND_BTN) {
+                        onSendClicked();
+                    }
+                }
+            });
+
+            // Capture the ButtonAPI reference so we can update its position later
+            sendButton = content.addButton(
+                    "Send", SEND_BTN,
+                    Misc.getBasePlayerColor(), Misc.getDarkPlayerColor(),
+                    Alignment.MID, CutStyle.ALL, 100f, 25f, 15f
+            );
+
+            add(content).inTL(0f, 0f);
+            updateDisplay();
+        }
+
+        private void onSendClicked() {
+            List<String> fullText = new ArrayList<>(pastLines);
+            if (textField != null && !textField.getText().trim().isEmpty()) {
+                fullText.add(textField.getText());
+            }
+
+            String combinedText = String.join("\n", fullText);
+            MoveByTextImpl.writeSubmittedTextToTerminal(combinedText);
+
+            pastLines.clear();
+            if (textField != null) {
+                textField.setText("");
+            }
+            updateDisplay();
+        }
+
+        @Override
+        public void processInput(List<InputEventAPI> events) {
+            if (textField == null) return;
+
+            for (InputEventAPI event : events) {
+                if (event.isKeyboardEvent() && event.isKeyDownEvent()) {
+                    int key = event.getEventValue();
+
+                    if (key == Keyboard.KEY_RETURN) {
+                        pastLines.add(textField.getText());
+                        textField.setText("");
+                        updateDisplay();
+                        event.consume();
+                    }
+                    else if (key == Keyboard.KEY_BACK) {
+                        if (lastText.isEmpty() && !pastLines.isEmpty()) {
+                            String popped = pastLines.remove(pastLines.size() - 1);
+                            textField.setText(popped);
+                            updateDisplay();
+                            event.consume();
+                        }
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void advance(float delta) {
+            if (textField != null) {
+                lastText = textField.getText();
+            }
+        }
+
+        private void updateDisplay() {
+            if (pastLines.isEmpty()) {
+                displayLabel.setText("");
+                displayLabel.getPosition().setSize(MAX_WIDTH, 0f);
+            } else {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < pastLines.size(); i++) {
+                    sb.append(pastLines.get(i));
+                    if (i < pastLines.size() - 1) sb.append("\n");
+                }
+                displayLabel.setText(sb.toString());
+                displayLabel.autoSizeToWidth(MAX_WIDTH);
+            }
+
+            // 1. Force position recompute for the text field
+            float currentWidth = textField.getPosition().getWidth();
+            float currentHeight = textField.getPosition().getHeight();
+            textField.getPosition().setSize(currentWidth, currentHeight);
+
+            // 2. Force position recompute for the Send Button so it continues to shift down
+            if (sendButton != null) {
+                float btnWidth = sendButton.getPosition().getWidth();
+                float btnHeight = sendButton.getPosition().getHeight();
+                sendButton.getPosition().setSize(btnWidth, btnHeight);
+            }
+        }
+
+        @Override public void renderBelow(float alpha) {}
+        @Override public void render(float alpha) {}
+    }
 }
