@@ -78,7 +78,7 @@ public class MultiLineTextFieldPanel extends CustomPanel {
         private List<String> pastLines = new ArrayList<>();
         private String lastText = "";
 
-        private static final float MAX_WIDTH = 280f;
+        private static final float MAX_WIDTH = 700f;
         private static final Object SEND_BTN = new Object();
 
         public EditorPanel() {
