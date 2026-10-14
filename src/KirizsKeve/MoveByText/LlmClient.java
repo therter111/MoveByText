@@ -74,20 +74,15 @@ public class LlmClient {
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     public LlmClient() {
-        String key = null;
-        String mdl = null;
-        String sys = null;
-        int maxTokens = 0;
+        this(loadConfig());
+    }
 
-        try {
-            JSONObject cfg = Global.getSettings().loadJSON(CONFIG_FILE);
-            key = clean(cfg.optString("apiKey", null));
-            mdl = clean(cfg.optString("model", null));
-            sys = clean(cfg.optString("systemPrompt", null));
-            maxTokens = cfg.optInt("maxOutputTokens", 0);
-        } catch (Exception e) {
-            LOG.warn("Could not read " + CONFIG_FILE + ": " + e.getMessage());
-        }
+    /** Takes the settings directly, so tests can run outside the game (no Global.getSettings()). */
+    LlmClient(JSONObject cfg) {
+        String key = clean(cfg.optString("apiKey", null));
+        String mdl = clean(cfg.optString("model", null));
+        String sys = clean(cfg.optString("systemPrompt", null));
+        int maxTokens = cfg.optInt("maxOutputTokens", 0);
 
         if (key != null && key.startsWith(KEY_PLACEHOLDER_PREFIX)) {
             key = null; // still the template placeholder
@@ -108,6 +103,15 @@ public class LlmClient {
             LOG.info("LlmClient ready, model = " + this.model);
         } else {
             LOG.warn("LlmClient NOT ready. Missing in " + CONFIG_FILE + ":" + missing);
+        }
+    }
+
+    private static JSONObject loadConfig() {
+        try {
+            return Global.getSettings().loadJSON(CONFIG_FILE);
+        } catch (Exception e) {
+            LOG.warn("Could not read " + CONFIG_FILE + ": " + e.getMessage());
+            return new JSONObject();
         }
     }
 
@@ -150,6 +154,17 @@ public class LlmClient {
                 }
             }
         });
+    }
+
+    /**
+     * Blocking request on the calling thread that doesn't record history, so every call is independent
+     * as long as ask() is never used on the same client. For tests only - never call this from the game thread.
+     */
+    String askNow(String userText) throws Exception {
+        if (!isConfigured()) {
+            throw new IllegalStateException("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
+        }
+        return sendRequest(userText);
     }
 
     /** Forgets the conversation so far. */

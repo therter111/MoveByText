@@ -3,6 +3,9 @@ package KirizsKeve.MoveByText;
 import com.fs.starfarer.api.BaseModPlugin;
 import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.campaign.LocationAPI;
+import com.fs.starfarer.api.campaign.PlanetAPI;
+import com.fs.starfarer.api.campaign.StarSystemAPI;
+import com.fs.starfarer.api.campaign.econ.MarketAPI;
 import org.apache.log4j.Logger;
 import org.lwjgl.util.vector.Vector2f;
 
@@ -79,7 +82,7 @@ public class MoveByTextImpl extends BaseModPlugin {
     }
 
     /**
-     * Scans the LLM text for tags like <SPAWN:remnants:200>
+     * Scans the LLM text for tags like <SPAWN:remnants:200> and <TRADE:independent:50:Askonia>
      * Assumes the LLM is always correct, skips error handling/validation.
      */
     private static void processAnySpawnCommands(String text) {
@@ -96,8 +99,112 @@ public class MoveByTextImpl extends BaseModPlugin {
             // Offset by 600 units
             Vector2f spawnCoords = new Vector2f(playerCoords.x + 600f, playerCoords.y + 600f);
 
-            FleetOnText.spawnAIFleet(factionId, points, system, spawnCoords);
+            writeCommandToTerminal("SPAWN " + factionId + " " + (int) points + " FP in " + system.getName());
+            try {
+                FleetOnText.spawnAIFleet(factionId, points, system, spawnCoords);
+            } catch (Exception e) {
+                writeCommandToTerminal("SPAWN crashed: " + e);
+                e.printStackTrace();
+            }
         }
+
+        // <TRADE:independent:50:Askonia> - trader fleet from the player's system to the named one
+        // <TRADE:independent:50:Askonia:Jangala> - same, but starting from the named origin
+        Matcher tradeMatcher = Pattern.compile("<TRADE:([^:]+):(\\d+):([^:>]+)(?::([^:>]+))?>").matcher(text);
+
+        while (tradeMatcher.find()) {
+            String factionId = tradeMatcher.group(1);
+            float points = Float.parseFloat(tradeMatcher.group(2));
+            String destName = tradeMatcher.group(3).trim();
+            String originName = tradeMatcher.group(4) != null ? tradeMatcher.group(4).trim() : null;
+
+            // The names come from the player's free text, so these can actually miss
+            Place dest = findPlace(destName);
+            if (dest == null) {
+                writeCommandToTerminal("TRADE FAILED: no star system, market or planet named '" + destName + "', nothing spawned");
+                continue;
+            }
+
+            LocationAPI originLocation;
+            MarketAPI originMarket = null;
+            if (originName != null) {
+                Place origin = findPlace(originName);
+                if (origin == null) {
+                    writeCommandToTerminal("TRADE FAILED: no star system, market or planet named '" + originName + "' to start from, nothing spawned");
+                    continue;
+                }
+                originLocation = origin.system;
+                originMarket = origin.market;
+            } else {
+                originLocation = Global.getSector().getPlayerFleet().getContainingLocation();
+            }
+
+            writeCommandToTerminal("TRADE " + factionId + " " + (int) points + " freighter pts, "
+                    + describe(originLocation, originMarket) + " -> " + describe(dest.system, dest.market)
+                    + ", matched '" + (originName != null ? originName : "player location") + "' -> '" + destName + "'");
+            try {
+                FleetOnText.spawnTraderFleet(factionId, points, originLocation, originMarket, dest.system, dest.market);
+            } catch (Exception e) {
+                writeCommandToTerminal("TRADE crashed: " + e);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static void writeCommandToTerminal(String message) {
+        System.out.println("=== LLM COMMAND === " + message);
+        Global.getLogger(MoveByTextImpl.class).info(message);
+    }
+
+    private static String describe(LocationAPI location, MarketAPI market) {
+        return location.getName() + (market != null ? " (" + market.getName() + ")" : "");
+    }
+
+    private static class Place {
+        final StarSystemAPI system;
+        final MarketAPI market; // null when only a system or a market-less planet matched
+
+        Place(StarSystemAPI system, MarketAPI market) {
+            this.system = system;
+            this.market = market;
+        }
+    }
+
+    /**
+     * Resolves a star system, market/station or planet name to a trade origin or destination.
+     * Exact matches win; a second pass accepts names the LLM cut short ("Chicomoz" -> Chicomoztoc).
+     */
+    private static Place findPlace(String name) {
+        name = name.replaceAll("(?i)\\s+(star\\s+)?system$", "").trim();
+
+        for (boolean prefix : new boolean[]{false, true}) {
+            for (StarSystemAPI system : Global.getSector().getStarSystems()) {
+                if (nameMatches(system.getBaseName(), name, prefix) || nameMatches(system.getName(), name, prefix)) {
+                    return new Place(system, null);
+                }
+            }
+            for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+                if (market.isHidden() || market.getStarSystem() == null || market.getPrimaryEntity() == null) continue;
+                if (nameMatches(market.getName(), name, prefix) || nameMatches(market.getPrimaryEntity().getName(), name, prefix)) {
+                    return new Place(market.getStarSystem(), market);
+                }
+            }
+            for (StarSystemAPI system : Global.getSector().getStarSystems()) {
+                for (PlanetAPI planet : system.getPlanets()) {
+                    if (!planet.isStar() && nameMatches(planet.getName(), name, prefix)) {
+                        return new Place(system, null);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean nameMatches(String candidate, String name, boolean allowPrefix) {
+        if (candidate == null) return false;
+        String c = candidate.toLowerCase();
+        String n = name.toLowerCase();
+        return c.equals(n) || (allowPrefix && n.length() >= 4 && c.startsWith(n));
     }
 
     public static void clearLlmHistory() {
