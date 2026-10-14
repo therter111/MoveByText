@@ -192,3 +192,4 @@ nbdist/
 .idea/vcs.xml
 
 .idea/csv-editor.xml
+/data/config/llmdata.json
