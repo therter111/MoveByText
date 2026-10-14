@@ -193,3 +193,5 @@ nbdist/
 
 .idea/csv-editor.xml
 /data/config/llmdata.json
+.idea/claudeCodeTabState.xml
+.mcp.json
