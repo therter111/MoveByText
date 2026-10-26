@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 public class MoveByTextImpl extends BaseModPlugin {
 
-    private static LlmClient llm;
+    private static LlmBackend llm;
     private static final Queue<String> llmReplies = new ConcurrentLinkedQueue<String>();
 
     @Override
@@ -32,7 +32,7 @@ public class MoveByTextImpl extends BaseModPlugin {
     @Override
     public void onGameLoad(boolean newGame) {
         if (llm == null) {
-            llm = new LlmClient();
+            llm = LlmBackend.create();
         }
         Global.getSector().addTransientScript(new CampaignMultiLineScreenPlugin());
     }
@@ -58,7 +58,7 @@ public class MoveByTextImpl extends BaseModPlugin {
 
         if (llm == null || text == null || text.trim().isEmpty()) return;
 
-        log.info("LLM: sending message to Gemini...");
+        log.info("LLM: sending message to " + llm.modelName() + "...");
         llm.ask(text, new LlmClient.Callback() {
             @Override
             public void onResponse(String reply) {
@@ -82,7 +82,7 @@ public class MoveByTextImpl extends BaseModPlugin {
     }
 
     /**
-     * Scans the LLM text for tags like <SPAWN:remnants:200> and <TRADE:independent:50:Askonia>
+     * Scans the LLM text for tags like <SPAWN:remnants:200>, <TRADE:independent:50:Askonia> and <HELP:nearby:150:Jangala>
      * Assumes the LLM is always correct, skips error handling/validation.
      */
     private static void processAnySpawnCommands(String text) {
@@ -91,7 +91,7 @@ public class MoveByTextImpl extends BaseModPlugin {
 
         while (matcher.find()) {
             String factionId = matcher.group(1);
-            float points = Float.parseFloat(matcher.group(2));
+            float points = parsePoints(matcher.group(2));
 
             LocationAPI system = Global.getSector().getPlayerFleet().getContainingLocation();
             Vector2f playerCoords = Global.getSector().getPlayerFleet().getLocation();
@@ -114,7 +114,7 @@ public class MoveByTextImpl extends BaseModPlugin {
 
         while (tradeMatcher.find()) {
             String factionId = tradeMatcher.group(1);
-            float points = Float.parseFloat(tradeMatcher.group(2));
+            float points = parsePoints(tradeMatcher.group(2));
             String destName = tradeMatcher.group(3).trim();
             String originName = tradeMatcher.group(4) != null ? tradeMatcher.group(4).trim() : null;
 
@@ -139,7 +139,7 @@ public class MoveByTextImpl extends BaseModPlugin {
                 originLocation = Global.getSector().getPlayerFleet().getContainingLocation();
             }
 
-            writeCommandToTerminal("TRADE " + factionId + " " + (int) points + " freighter pts, "
+            writeCommandToTerminal("TRADE " + factionId + " " + (int) points + " FP, "
                     + describe(originLocation, originMarket) + " -> " + describe(dest.system, dest.market)
                     + ", matched '" + (originName != null ? originName : "player location") + "' -> '" + destName + "'");
             try {
@@ -149,11 +149,51 @@ public class MoveByTextImpl extends BaseModPlugin {
                 e.printStackTrace();
             }
         }
+
+        // <HELP:nearby:150:Jangala> - the closest friendly faction sends a fleet to defend the named place
+        // <HELP:hegemony:150:Jangala> - same, but the named faction sends it from its closest market
+        Matcher helpMatcher = Pattern.compile("<HELP:([^:]+):(\\d+):([^:>]+)>").matcher(text);
+
+        while (helpMatcher.find()) {
+            String factionId = helpMatcher.group(1).trim();
+            if (factionId.equals("nearby")) factionId = null;
+            float points = parsePoints(helpMatcher.group(2));
+            String targetName = helpMatcher.group(3).trim();
+
+            Place target = findPlace(targetName);
+            if (target == null) {
+                writeCommandToTerminal("HELP FAILED: no star system, market or planet named '" + targetName + "', nothing spawned");
+                continue;
+            }
+
+            writeCommandToTerminal("HELP " + (factionId != null ? factionId : "nearest friendly faction") + " "
+                    + (int) points + " FP to " + describe(target.system, target.market) + ", matched '" + targetName + "'");
+            try {
+                FleetOnText.spawnHelpFleet(factionId, points, target.system, target.market);
+            } catch (Exception e) {
+                writeCommandToTerminal("HELP crashed: " + e);
+                e.printStackTrace();
+            }
+        }
     }
 
     private static void writeCommandToTerminal(String message) {
         System.out.println("=== LLM COMMAND === " + message);
         Global.getLogger(MoveByTextImpl.class).info(message);
+    }
+
+    // Fleet size shared by all commands: 15 tiny ... 300 humongous, or the player's own number
+    private static final int MIN_POINTS = 1;
+    private static final int MAX_POINTS = 300;
+
+    // Keeps a size the player typed out of range from spawning absurd fleets
+    private static float parsePoints(String digits) {
+        long points = Long.parseLong(digits.length() > 9 ? "999999999" : digits);
+        long clamped = Math.max(MIN_POINTS, Math.min(MAX_POINTS, points));
+        if (clamped != points) {
+            writeCommandToTerminal("size " + digits + " is outside " + MIN_POINTS + "-" + MAX_POINTS + ", using " + clamped);
+        }
+        return clamped;
     }
 
     private static String describe(LocationAPI location, MarketAPI market) {
@@ -171,7 +211,7 @@ public class MoveByTextImpl extends BaseModPlugin {
     }
 
     /**
-     * Resolves a star system, market/station or planet name to a trade origin or destination.
+     * Resolves a star system, market/station or planet name to a trade origin, destination or HELP target.
      * Exact matches win; a second pass accepts names the LLM cut short ("Chicomoz" -> Chicomoztoc).
      */
     private static Place findPlace(String name) {

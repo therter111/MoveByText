@@ -31,7 +31,7 @@ import java.util.concurrent.ThreadFactory;
  * when the object is created: apiKey, model, systemPrompt (required) and maxOutputTokens
  * (optional). Nothing is hardcoded here and there is no environment-variable fallback.
  */
-public class LlmClient {
+public class LlmClient implements LlmBackend {
 
     public interface Callback {
         /** Called on a background thread when the model answered. */
@@ -44,13 +44,15 @@ public class LlmClient {
     private static final Logger LOG = Global.getLogger(LlmClient.class);
 
     /** Every setting is read from this file (relative to the mod folder). */
-    private static final String CONFIG_FILE = "data/config/llmdata.json";
+    static final String CONFIG_FILE = "data/config/llmdata.json";
     private static final String ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
     private static final String KEY_PLACEHOLDER_PREFIX = "PASTE_";
 
     /** Max number of stored messages (user + model together). */
     private static final int MAX_HISTORY_MESSAGES = 20;
 
+    /** ENDPOINT_BASE, except in tests that talk to a fake server. */
+    private final String endpointBase;
     private final String apiKey;
     private final String model;
     private final String systemPrompt;
@@ -58,6 +60,8 @@ public class LlmClient {
     private final int maxOutputTokens;
     /** Names of required settings missing from the file, or "" when everything is there. */
     private final String missingSettings;
+    /** How long to wait for Gemini's answer. The game keeps the default; tests may change it. */
+    int readTimeoutMs = 60000;
 
     /** Entries are {role, text}. Only ever touched from the worker thread. */
     private final List<String[]> history = new ArrayList<String[]>();
@@ -79,6 +83,13 @@ public class LlmClient {
 
     /** Takes the settings directly, so tests can run outside the game (no Global.getSettings()). */
     LlmClient(JSONObject cfg) {
+        this(cfg, ENDPOINT_BASE);
+    }
+
+    /** Same, but sends requests to endpointBase instead of Google, so tests can use a fake server on localhost. */
+    LlmClient(JSONObject cfg, String endpointBase) {
+        this.endpointBase = endpointBase;
+
         String key = clean(cfg.optString("apiKey", null));
         String mdl = clean(cfg.optString("model", null));
         String sys = clean(cfg.optString("systemPrompt", null));
@@ -106,7 +117,7 @@ public class LlmClient {
         }
     }
 
-    private static JSONObject loadConfig() {
+    static JSONObject loadConfig() {
         try {
             return Global.getSettings().loadJSON(CONFIG_FILE);
         } catch (Exception e) {
@@ -122,11 +133,18 @@ public class LlmClient {
         return value.isEmpty() ? null : value;
     }
 
+    @Override
     public boolean isConfigured() {
         return missingSettings.isEmpty();
     }
 
+    @Override
+    public String modelName() {
+        return model == null ? "?" : model;
+    }
+
     /** Sends one user message. Returns immediately; the answer arrives through the callback. */
+    @Override
     public void ask(final String userText, final Callback callback) {
         if (!isConfigured()) {
             callback.onError("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
@@ -160,7 +178,8 @@ public class LlmClient {
      * Blocking request on the calling thread that doesn't record history, so every call is independent
      * as long as ask() is never used on the same client. For tests only - never call this from the game thread.
      */
-    String askNow(String userText) throws Exception {
+    @Override
+    public String askNow(String userText) throws Exception {
         if (!isConfigured()) {
             throw new IllegalStateException("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
         }
@@ -168,6 +187,7 @@ public class LlmClient {
     }
 
     /** Forgets the conversation so far. */
+    @Override
     public void clearHistory() {
         worker.submit(new Runnable() {
             @Override
@@ -210,13 +230,13 @@ public class LlmClient {
             body.put("generationConfig", generationConfig);
         }
 
-        URL url = new URL(ENDPOINT_BASE + model + ":generateContent");
+        URL url = new URL(endpointBase + model + ":generateContent");
         LOG.info("Sending HTTP request to Gemini (model " + model + ")...");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         try {
             conn.setRequestMethod("POST");
             conn.setConnectTimeout(10000);
-            conn.setReadTimeout(60000);
+            conn.setReadTimeout(readTimeoutMs);
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             conn.setRequestProperty("x-goog-api-key", apiKey); // header keeps the key out of URLs/logs
@@ -279,7 +299,8 @@ public class LlmClient {
         return text;
     }
 
-    private static String readFully(InputStream in) throws Exception {
+    /** Also used by KoboldCppClient. */
+    static String readFully(InputStream in) throws Exception {
         if (in == null) return "";
         try {
             // Starsector's script sandbox blocks most java.io classes (e.g. ByteArrayOutputStream),

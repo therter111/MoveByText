@@ -1,0 +1,36 @@
+# Rasa NLU pipeline for MoveByText. No LLM and no pretrained language model: every feature is learned from
+# rasa/data/nlu.yml, which generate_nlu.py writes from templates. Trained with "rasa train nlu" (see train.bat).
+recipe: default.v1
+language: en
+assistant_id: movebytext-nlu
+
+pipeline:
+  # Splits on spaces; "spawn_fleet+trade_convoy" is read as two intents at once
+  - name: WhitespaceTokenizer
+    intent_tokenization_flag: true
+    intent_split_symbol: "+"
+  # Marks words that are in the faction and place lookup tables, so new names in known spots are recognized
+  - name: RegexFeaturizer
+    case_sensitive: false
+    use_lookup_tables: true
+    use_regexes: true
+  # Capitalization, word position, prefixes and suffixes
+  - name: LexicalSyntacticFeaturizer
+  # Whole words, then 2-5 letter pieces, which keeps typos like "tritachion" close to the real word
+  - name: CountVectorsFeaturizer
+  - name: CountVectorsFeaturizer
+    analyzer: char_wb
+    min_ngram: 2
+    max_ngram: 5
+  # One model for both jobs: which intent, and which words are the faction, size, places and so on
+  # 40 epochs: the template data is learned by then, and each epoch takes ~20 s on a CPU
+  - name: DIETClassifier
+    epochs: 40
+    constrain_similarities: true
+    random_seed: 42
+  # Not sure enough about any intent -> nlu_fallback, which the mod treats as "not a request"
+  - name: FallbackClassifier
+    threshold: 0.5
+
+# NLU only: no dialogue policies are trained
+policies: []
