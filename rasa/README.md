@@ -13,6 +13,7 @@ command tags the LLMs write, so the game and the tests treat every provider the 
 | `train.bat` | Generates the data, removes overlaps, trains a model into `models/`. |
 | `start-server.bat` | Starts the server on `127.0.0.1:5005` (this PC only). |
 | `cross-validate.bat`, `cross_validate.py` | 10-fold cross-validation of the training data, results in `results/cv-<date>-<time>/`. |
+| `test_handwritten.py` | Runs the hand-written `LlmPromptTest` cases against every model of a cross-validation run. |
 | `requirements.txt` | Exact Python package versions for the install. |
 
 ## Setup (once)
@@ -54,6 +55,13 @@ spread, scores per intent) and a `part-01` to `part-10` folder each holding that
 log. A stopped run continues with `cross-validate.bat --resume results\cv-<date>-<time>`. Each part runs in its own
 process because Rasa's built-in `rasa test nlu --cross-validation` keeps all parts in one process, which slowed down
 with every part and ran out of memory.
+
+Those scores only show how well the templates are learned. To see how the same 10 models do on the hand-written cases,
+run `python test_handwritten.py` in the Rasa environment (about 20 minutes, needs a JDK 17). It tests every part's
+model and the newest model in `models/` with `LlmPromptTest`, using its own config and port 5006, so
+`data/config/llmdata.json` and a running `start-server.bat` are left alone. It writes `handwritten-summary.md` into the
+run folder, with pass rates per model, per set and per group. In October 2026 the parts passed 42.7% on average
+(basic 86%, advanced 33%, extensive 30%), against 99.6% on the template cross-validation.
 
 ## How well it does
 On the 629 cases of `LlmPromptTest` (October 2026), the Rasa model passes about **42%**. Qwen 3.5 9B with the system
