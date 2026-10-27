@@ -12,6 +12,7 @@ command tags the LLMs write, so the game and the tests treat every provider the 
 | `config.yml` | The NLU pipeline: tokenizer, word and character features, DIET, fallback. |
 | `train.bat` | Generates the data, removes overlaps, trains a model into `models/`. |
 | `start-server.bat` | Starts the server on `127.0.0.1:5005` (this PC only). |
+| `cross-validate.bat`, `cross_validate.py` | 10-fold cross-validation of the training data, results in `results/cv-<date>-<time>/`. |
 | `requirements.txt` | Exact Python package versions for the install. |
 
 ## Setup (once)
@@ -45,6 +46,14 @@ add new ones in both places.
 
 To see how well a model does, run `LlmPromptTest` with the provider set to `rasa`. It writes
 `test/logs/llm-prompt-test_rasa_<date>.log`, the same report the LLMs get.
+
+To see how well the pipeline learns the training data itself, run `cross-validate.bat` (about 3 hours). It splits the
+examples into 10 parts with the same intent mix, and for each part trains a model on the other 9 and tests it on that
+one. Each run gets a folder `results/cv-<date>-<time>/` with `full.log`, `summary.md` (scores per part, mean and
+spread, scores per intent) and a `part-01` to `part-10` folder each holding that part's data, model, Rasa reports and
+log. A stopped run continues with `cross-validate.bat --resume results\cv-<date>-<time>`. Each part runs in its own
+process because Rasa's built-in `rasa test nlu --cross-validation` keeps all parts in one process, which slowed down
+with every part and ran out of memory.
 
 ## How well it does
 On the 629 cases of `LlmPromptTest` (October 2026), the Rasa model passes about **42%**. Qwen 3.5 9B with the system
