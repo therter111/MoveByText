@@ -2,7 +2,8 @@
   # Copy this file to: <your mod folder>/data/config/llmdata.json
 
   # Which model answers: "koboldcpp" (your own KoboldCpp server, e.g. Qwen on another PC), "rasa" (a Rasa NLU
-  # server on this PC, no language model, see rasa/README.md) or "gemini" (Google's API).
+  # server on this PC, no language model, see rasa/README.md), "spacy" (a spaCy NLU server on this PC, trained on
+  # the same examples, see spacy/README.md) or "gemini" (Google's API).
   "provider": "koboldcpp",
 
   # ---- KoboldCpp (used when provider is "koboldcpp") ----
@@ -31,6 +32,18 @@
     # Messages Rasa is less sure about than this count as not a request.
     "minConfidence": 0.5,
     "timeoutSeconds": 30
+  },
+
+  # ---- spaCy (used when provider is "spacy") ----
+  # Same idea as Rasa, with spaCy and pretrained word vectors. Every field is optional.
+  "spacy": {
+    # Where spacy/start-server.bat listens.
+    "url": "http://127.0.0.1:5007",
+    # Messages spaCy is less sure about than this count as not a request.
+    "minConfidence": 0.5,
+    "timeoutSeconds": 30
+    # Optional: which of the mod's fixes for spaCy's mistakes run, e.g. "rules": ["cancel", "faction"], or "all"
+    # or "none". Without it the default set runs; spacy/README.md explains each one.
   },
 
   # ---- Gemini (used when provider is "gemini") ----

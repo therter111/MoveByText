@@ -75,24 +75,24 @@ def compile_tests(jdk, classes):
     say("compiled %d source files" % len(sources))
 
 
-def write_config(path):
-    """The example config with the provider set to a Rasa server on PORT."""
+def write_config(path, provider="rasa", port=PORT):
+    """The example config with the provider set to a local server on port ("rasa", or "spacy" for spacy/)."""
     example = os.path.join(MOD, "data", "config", "llmdata.json.example")
     cfg = json.loads("".join(l for l in open(example, encoding="utf-8") if not l.strip().startswith("#")))
-    cfg["provider"] = "rasa"
-    cfg["rasa"] = {"url": "http://127.0.0.1:%d" % PORT, "token": "", "minConfidence": 0.5, "timeoutSeconds": 30}
+    cfg["provider"] = provider
+    cfg[provider] = {"url": "http://127.0.0.1:%d" % port, "token": "", "minConfidence": 0.5, "timeoutSeconds": 30}
     json.dump(cfg, open(path, "w", encoding="utf-8"), indent=2)
 
 
-def status():
+def status(port=PORT):
     try:
-        with urllib.request.urlopen("http://127.0.0.1:%d/status" % PORT, timeout=3) as r:
+        with urllib.request.urlopen("http://127.0.0.1:%d/status" % port, timeout=3) as r:
             return json.load(r)
     except Exception:
         return None
 
 
-def stop(server):
+def stop(server, port=PORT):
     # /T: the venv's python.exe starts the real interpreter as a child process, which has to go too
     if os.name == "nt":
         subprocess.run(["taskkill", "/PID", str(server.pid), "/T", "/F"], capture_output=True)
@@ -100,7 +100,7 @@ def stop(server):
         server.kill()
     server.wait()
     for _ in range(30):
-        if status() is None:
+        if status(port) is None:
             return
         time.sleep(1)
 
@@ -120,24 +120,29 @@ def parse_console(text):
     return cases
 
 
-def evaluate(label, model, out, jdk, classes, config):
-    """Runs LlmPromptTest against one model; saves everything in out and returns the result."""
+def evaluate(label, model, out, jdk, classes, config, server_cmd=None, port=PORT, name="Rasa"):
+    """Runs LlmPromptTest against one model; saves everything in out and returns the result.
+
+    server_cmd starts the server for the model on port; by default a Rasa server. spacy/test_handwritten.py passes
+    its own.
+    """
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(out)
-    if status() is not None:
-        raise RuntimeError("something is already listening on port %d" % PORT)
+    if status(port) is not None:
+        raise RuntimeError("something is already listening on port %d" % port)
+    if server_cmd is None:
+        server_cmd = [sys.executable, "-m", "rasa", "run", "--enable-api", "--interface", "127.0.0.1",
+                      "--port", str(port), "--model", model]
     server_log = open(os.path.join(out, "server.log"), "w", encoding="utf-8")
     start = time.time()
-    server = subprocess.Popen([sys.executable, "-m", "rasa", "run", "--enable-api", "--interface", "127.0.0.1",
-                               "--port", str(PORT), "--model", model], cwd=HERE, env=ENV,
-                              stdout=server_log, stderr=subprocess.STDOUT)
+    server = subprocess.Popen(server_cmd, cwd=HERE, env=ENV, stdout=server_log, stderr=subprocess.STDOUT)
     try:
         while True:
-            s = status()
+            s = status(port)
             if s and s.get("model_file"):
                 break
             if server.poll() is not None or time.time() - start > 300:
-                raise RuntimeError("the Rasa server for %s did not start, see %s" % (label, server_log.name))
+                raise RuntimeError("the %s server for %s did not start, see %s" % (name, label, server_log.name))
             time.sleep(2)
         say("%s: server up in %.0f s" % (label, time.time() - start))
         started = time.time()
@@ -145,7 +150,7 @@ def evaluate(label, model, out, jdk, classes, config):
                                "-cp", classes + os.pathsep + CLASSPATH, "KirizsKeve.MoveByText.LlmPromptTest", config],
                               cwd=MOD, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3600)
     finally:
-        stop(server)
+        stop(server, port)
         server_log.close()
 
     console = proc.stdout + proc.stderr
@@ -177,7 +182,7 @@ def spread(values):
     return statistics.stdev(values) if len(values) > 1 else 0.0
 
 
-def summarize(run, parts, full):
+def summarize(run, parts, full, name="Rasa", filename="handwritten-summary"):
     def row(r):
         return "| %s | %s | %s | %s | %d/%d (%.1f%%) |" % (
             r["label"], *["%d/%d (%.0f%%)" % (r[s][0], r[s][1], pct(*r[s])) for s in SETS],
@@ -186,8 +191,8 @@ def summarize(run, parts, full):
     md = ["# Cross-validation models on the hand-written test cases", "",
           "Each part's model (trained on all parts but its own) was run through `LlmPromptTest`: %d hand-written "
           "cases (basic, advanced, and long \"extensive\" ones). The full model, trained on all the template data, "
-          "is shown for comparison. Rasa answers the same way every time, so a case either passes or fails."
-          % parts[0]["total"],
+          "is shown for comparison. %s answers the same way every time, so a case either passes or fails."
+          % (parts[0]["total"], name),
           "", "## Pass rate per model", "", "| Model | Basic | Advanced | Extensive | Total |", "|---|---|---|---|---|"]
     md += [row(r) for r in parts]
     totals = [pct(r["passed"], r["total"]) for r in parts]
@@ -217,13 +222,13 @@ def summarize(run, parts, full):
            "| Models that pass the case | " + " | ".join(str(k) for k in range(len(parts) + 1)) + " |",
            "|---|" + "---|" * (len(parts) + 1), "| Cases | " + " | ".join(str(h) for h in hist) + " |"]
 
-    with open(os.path.join(run, "handwritten-summary.md"), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(run, filename + ".md"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(md) + "\n")
     strip = lambda r: {k: v for k, v in r.items() if k != "cases"}
     json.dump(dict(parts=[strip(r) for r in parts], full_model=strip(full) if full else None,
                    passes_per_case=per_case),
-              open(os.path.join(run, "handwritten-summary.json"), "w", encoding="utf-8"), indent=1)
-    say("summary: " + os.path.relpath(os.path.join(run, "handwritten-summary.md"), HERE))
+              open(os.path.join(run, filename + ".json"), "w", encoding="utf-8"), indent=1)
+    say("summary: " + os.path.relpath(os.path.join(run, filename + ".md"), HERE))
 
 
 def main():

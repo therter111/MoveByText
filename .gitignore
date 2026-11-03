@@ -205,3 +205,8 @@ nbdist/
 /rasa/data/
 __pycache__/
 *.pyc
+
+### spaCy NLU (spacy/) ###
+# Trained models and cross-validation results are rebuilt by spacy/train.bat and spacy/cross-validate.bat
+/spacy/models/
+/spacy/results/

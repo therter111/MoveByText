@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /**
  * Live test of the LLM part only: sends player sentences to the model picked by "provider" in llmdata.json
- * (Gemini, KoboldCpp running e.g. a local Qwen, or a Rasa NLU server, which ignores the prompt) with the real system prompt from data/config/llmdata.json and checks the command tags that come back. Nothing in the game is touched.
+ * (Gemini, KoboldCpp running e.g. a local Qwen, or a Rasa or spaCy NLU server, which ignore the prompt) with the real system prompt from data/config/llmdata.json and checks the command tags that come back. Nothing in the game is touched.
  *
  * A reply passes when the game would do the same with it as with an expected reply, so it is as lenient as
  * MoveByTextImpl: tags in any order (the game runs all SPAWN tags, then TRADE, then HELP), place names in any
@@ -264,7 +264,7 @@ public class LlmPromptTest {
         JSONObject cfg = readConfig(config);
         LlmBackend llm = LlmBackend.fromConfig(cfg);
         if (llm instanceof LlmClient) ((LlmClient) llm).readTimeoutMs = READ_TIMEOUT_MS; // KoboldCpp: koboldcpp.timeoutSeconds
-        rateLimited = !(llm instanceof KoboldCppClient || llm instanceof RasaClient); // local servers have no rate limit
+        rateLimited = !(llm instanceof KoboldCppClient || llm instanceof NluServerClient); // local servers have no rate limit
         if (!llm.isConfigured()) {
             System.out.println("LLM not configured, check " + config.toAbsolutePath());
             System.exit(1);
@@ -280,7 +280,8 @@ public class LlmPromptTest {
         }
 
         // separate log files per provider
-        String provider = llm instanceof KoboldCppClient ? "koboldcpp" : llm instanceof RasaClient ? "rasa" : null;
+        String provider = llm instanceof KoboldCppClient ? "koboldcpp" : llm instanceof RasaClient ? "rasa"
+                : llm instanceof SpacyClient ? "spacy" : null;
         LlmTestReport report = new LlmTestReport(LOG_DIR, provider, modelLabel(llm), cfg.optString("systemPrompt", ""),
                 filter, groupOfEachCase, CASES.size());
         System.out.println("Writing the results to " + report.file().toAbsolutePath());
@@ -370,13 +371,13 @@ public class LlmPromptTest {
     }
 
     /**
-     * For the log file. KoboldCpp and Rasa are asked which model file they have loaded, so runs with different quants
-     * or different training runs can be told apart.
+     * For the log file. KoboldCpp, Rasa and spaCy are asked which model they have loaded, so runs with different
+     * quants or different training runs can be told apart.
      */
     private static String modelLabel(LlmBackend llm) {
         try {
             if (llm instanceof KoboldCppClient) return ((KoboldCppClient) llm).loadedModel();
-            if (llm instanceof RasaClient) return ((RasaClient) llm).loadedModel();
+            if (llm instanceof NluServerClient) return ((NluServerClient) llm).loadedModel();
         } catch (Exception e) {
             System.out.println("Could not ask the server which model is loaded: " + e.getMessage());
         }
@@ -407,7 +408,7 @@ public class LlmPromptTest {
     /** Requests sent so far, for the log file. */
     static int requestsSent = 0;
     private static long lastRequestAt;
-    /** False for KoboldCpp and Rasa, which need no pacing. */
+    /** False for KoboldCpp, Rasa and spaCy, which need no pacing. */
     static boolean rateLimited = true;
 
     /**

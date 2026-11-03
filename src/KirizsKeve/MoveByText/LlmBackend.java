@@ -9,8 +9,9 @@ import org.json.JSONObject;
  * - LlmClient sends the text to Google's Gemini API.
  * - KoboldCppClient sends it to a KoboldCpp server, e.g. Qwen running on another PC reached over Tailscale.
  * - RasaClient reads it with a Rasa NLU server instead: intent classification and entity extraction, no LLM.
+ * - SpacyClient does the same with a spaCy NLU server, trained on the same examples but with pretrained word vectors.
  *
- * "provider" in data/config/llmdata.json picks one: "koboldcpp", "rasa" or "gemini". Without it, Gemini is used,
+ * "provider" in data/config/llmdata.json picks one: "koboldcpp", "rasa", "spacy" or "gemini". Without it, Gemini is used,
  * so older settings files keep working. The name says LLM, but every provider just turns text into command tags.
  */
 public interface LlmBackend {
@@ -44,9 +45,12 @@ public interface LlmBackend {
         if (provider.equals("rasa")) {
             return new RasaClient(cfg);
         }
+        if (provider.equals("spacy")) {
+            return new SpacyClient(cfg);
+        }
         if (!provider.equals("gemini")) {
             Global.getLogger(LlmBackend.class).warn("Unknown provider \"" + provider + "\" in "
-                    + LlmClient.CONFIG_FILE + ", using Gemini. Use \"koboldcpp\", \"rasa\" or \"gemini\".");
+                    + LlmClient.CONFIG_FILE + ", using Gemini. Use \"koboldcpp\", \"rasa\", \"spacy\" or \"gemini\".");
         }
         return new LlmClient(cfg);
     }

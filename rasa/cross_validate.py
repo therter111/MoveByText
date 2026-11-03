@@ -255,15 +255,15 @@ def pooled_intents(run, done):
             for label in labels}
 
 
-def write_summary(run, folds):
-    """Writes summary.md and summary.json for the parts finished so far."""
+def write_summary(run, folds, title="Rasa NLU cross-validation", metrics=METRICS):
+    """Writes summary.md and summary.json for the parts finished so far. spacy/cross_validate.py uses it too."""
     done = [n for n in range(1, folds + 1) if os.path.exists(os.path.join(part_dir(run, n), "summary.json"))]
     if not done:
         return None
     parts = [json.load(open(os.path.join(part_dir(run, n), "summary.json"), encoding="utf-8")) for n in done]
 
     overall = {}
-    for key, _ in METRICS:
+    for key, _ in metrics:
         values = [p[key] for p in parts if p.get(key) is not None]
         if values:
             overall[key] = dict(mean=statistics.mean(values), std=statistics.stdev(values) if len(values) > 1 else 0.0,
@@ -277,22 +277,22 @@ def write_summary(run, folds):
             per_entity[label]["support"] += v["support"]
     per_entity = {k: dict(mean_f1=statistics.mean(v["f1"]), examples=v["support"]) for k, v in sorted(per_entity.items())}
 
-    md = ["# Rasa NLU cross-validation", "",
+    md = ["# " + title, "",
           "Run `%s`: %d of %d parts done. Each part trains a model on the other %d parts and tests it on its own "
           "examples, so every example is tested once by a model that never saw it."
           % (os.path.basename(run), len(done), folds, folds - 1), "",
           "## Overall", "", "| | Mean | Std | Min | Max |", "|---|---|---|---|---|"]
-    for key, name in METRICS:
+    for key, name in metrics:
         if key in overall:
             o = overall[key]
             md.append("| %s | %s | %s | %s | %s |" % (name, _num(o["mean"]), _num(o["std"]), _num(o["min"]), _num(o["max"])))
 
     md += ["", "## Per part", "",
-           "| Part | Train | Test | " + " | ".join(name for _, name in METRICS) + " | Train min | Test min | Lowest free RAM GB |",
-           "|" + "---|" * (len(METRICS) + 6)]
+           "| Part | Train | Test | " + " | ".join(name for _, name in metrics) + " | Train min | Test min | Lowest free RAM GB |",
+           "|" + "---|" * (len(metrics) + 6)]
     for p in parts:
         md.append("| %d | %d | %d | %s | %s | %s | %s |" % (
-            p["part"], p["train_examples"], p["test_examples"], " | ".join(_num(p.get(k)) for k, _ in METRICS),
+            p["part"], p["train_examples"], p["test_examples"], " | ".join(_num(p.get(k)) for k, _ in metrics),
             _num(p["train_minutes"], 1), _num(p["test_minutes"], 1), _num(p.get("lowest_free_ram_gb"), 1)))
 
     if per_intent:

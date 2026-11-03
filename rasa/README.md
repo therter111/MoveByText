@@ -1,6 +1,7 @@
 # Rasa NLU parser for MoveByText
 
-A third way to read the player's text, next to Gemini and KoboldCpp, with **no language model**. Rasa's DIET
+A third way to read the player's text, next to Gemini and KoboldCpp, with **no language model**. `../spacy` has a
+spaCy version of the same thing, trained on the same examples. Rasa's DIET
 classifier, trained only on the examples in this folder, picks the intent (spawn a fleet, send a convoy, send help,
 or not a request) and marks the faction, size, places and so on. `RasaCommandBuilder.java` turns that into the same
 command tags the LLMs write, so the game and the tests treat every provider the same way.
@@ -43,7 +44,8 @@ curl.exe -X POST http://127.0.0.1:5005/model/parse -d "{\"text\":\"spawn a small
 ## Changing what it understands
 Edit the templates or word lists in `generate_nlu.py`, run `train.bat`, restart the server. Faction nicknames and
 size words are also listed in `RasaCommandBuilder.java` (`FactionNames`, `SizeWords`), which does the final mapping;
-add new ones in both places.
+add new ones in both places. The spaCy model in `../spacy` learns from the same templates, so retrain it too
+(`spacy/train.bat`).
 
 To see how well a model does, run `LlmPromptTest` with the provider set to `rasa`. It writes
 `test/logs/llm-prompt-test_rasa_<date>.log`, the same report the LLMs get.

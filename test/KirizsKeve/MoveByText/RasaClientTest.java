@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Offline tests for RasaClient: settings, the /model/parse request, turning the answer into tags, errors, /status
  * and the background thread. A fake Rasa server runs on localhost, so Rasa doesn't need to be installed.
+ * The "spacy:" cases check SpacyClient, which shares all of this (NluServerClient) and talks to the same format.
  * RasaCommandBuilderTest covers the entity rules in detail.
  *
  * Run main() from IntelliJ (working directory = the mod folder). Pass a word to run only matching tests.
@@ -64,6 +65,7 @@ public class RasaClientTest {
             check(llm.isConfigured(), "a client without settings should still be ready");
             same(30000, llm.readTimeoutMs, "read timeout");
             same("Rasa NLU", llm.modelName(), "modelName()");
+            same("http://127.0.0.1:5005", llm.url, "url");
         });
 
         test("config: url forms are normalized", g -> {
@@ -171,6 +173,141 @@ public class RasaClientTest {
         test("describe: a readable summary for the game log", g -> {
             JSONObject p = new JSONObject(parse("spawn_fleet", 0.97, ent("faction", "pirate"), ent("size", "small", "2")));
             same("spawn_fleet 0.97: faction=pirate size=small#2", RasaClient.describe(p), "summary");
+        });
+
+        // spaCy: the same client with its own settings block, address and names
+
+        test("spacy: provider \"spacy\" -> SpacyClient, and the example file's spacy block works", g -> {
+            check(LlmBackend.fromConfig(new JSONObject().put("provider", " spaCy ")) instanceof SpacyClient, "provider spaCy");
+            JSONObject example = LlmPromptTest.readConfig(Paths.get("data/config/llmdata.json.example"));
+            check(example.has("spacy"), "the example file should have a spacy block");
+            LlmBackend llm = LlmBackend.fromConfig(example.put("provider", "spacy"));
+            check(llm instanceof SpacyClient && llm.isConfigured(), "the example's spacy block should give a ready SpacyClient");
+        });
+
+        test("spacy: defaults are localhost:5007, 30 s, \"spaCy NLU\"", g -> {
+            SpacyClient llm = new SpacyClient(new JSONObject());
+            check(llm.isConfigured(), "a client without settings should still be ready");
+            same("http://127.0.0.1:5007", llm.url, "url");
+            same(30000, llm.readTimeoutMs, "read timeout");
+            same("spaCy NLU", llm.modelName(), "modelName()");
+        });
+
+        test("spacy: reads the spacy block, not the rasa one", g -> {
+            JSONObject cfg = new JSONObject()
+                    .put("rasa", new JSONObject().put("url", closedEndpoint()).put("minConfidence", 0.99))
+                    .put("spacy", new JSONObject().put("url", g.endpoint() + "/model/parse"));
+            g.reply(200, parse("spawn_fleet", 0.9, ent("size", "small"), ent("faction", "pirate")));
+            same("<SPAWN:pirates:40>", new SpacyClient(cfg).askNow("spawn a small pirate fleet"), "reply");
+            same("/model/parse", g.only().uri.getPath(), "path");
+        });
+
+        test("spacy: errors name spaCy and spacy/start-server.bat", g -> {
+            Throwable e = fails(() -> spacyClient(closedEndpoint()).askNow("hi"), "closed port");
+            check(e instanceof ConnectException, "expected ConnectException, got " + e);
+            has(e.getMessage(), "spacy/start-server.bat", "message");
+            has(e.getMessage(), "Can't connect to spaCy", "message");
+            g.reply(500, "{}");
+            same("spaCy returned HTTP 500: {}", fails(() -> spacyClient(g.endpoint()).askNow("hi"), "500").getMessage(),
+                    "500 message");
+        });
+
+        test("spacy: loadedModel names the model folder", g -> {
+            g.reply(200, "{\"model_file\":\"models/nlu-20261103-120000\"}");
+            same("spacy/nlu-20261103-120000", spacyClient(g.endpoint()).loadedModel(), "model");
+            same("/status", g.only().uri.getPath(), "path");
+        });
+
+        test("spacy rule: a sentence read as cancel without cancel words doesn't wipe the request", g -> {
+            g.reply(200, said("Spawn a pirate fleet.", "spawn_fleet", 0.99, ent("faction", "pirate")));
+            g.reply(200, said("I beat a small one yesterday.", "cancel", 0.7));
+            same("<SPAWN:pirates:100>", spacyClient(g.endpoint()).askNow("Spawn a pirate fleet. I beat a small one yesterday."),
+                    "story read as cancel");
+            g.reply(200, said("Spawn a pirate fleet.", "spawn_fleet", 0.99, ent("faction", "pirate")));
+            g.reply(200, said("Never mind.", "cancel", 0.95));
+            same("<NONE>", spacyClient(g.endpoint()).askNow("Spawn a pirate fleet. Never mind."), "real cancel");
+        });
+
+        test("spacy rule: Rasa has no rules, the same answers still cancel there", g -> {
+            g.reply(200, said("Spawn a pirate fleet.", "spawn_fleet", 0.99, ent("faction", "pirate")));
+            g.reply(200, said("I beat a small one yesterday.", "cancel", 0.7));
+            same("<NONE>", client(g, g.endpoint(), null).askNow("Spawn a pirate fleet. I beat a small one yesterday."),
+                    "RasaClient");
+        });
+
+        test("spacy rule: a faction missed in a short command is looked up, not in long sentences", g -> {
+            g.reply(200, said("a gigantic tri-tachyon fleet", "spawn_fleet", 0.99, ent("size", "gigantic")));
+            same("<SPAWN:tritachyon:300>", spacyClient(g.endpoint()).askNow("a gigantic tri-tachyon fleet"), "short");
+            String longer = "please spawn a gigantic fleet of tri-tachyon ships for me right now";
+            g.reply(200, said(longer, "spawn_fleet", 0.99, ent("size", "gigantic")));
+            same("<NONE>", spacyClient(g.endpoint()).askNow(longer), "12 words");
+        });
+
+        test("spacy rule: ordinary words marked as a faction are dropped, made-up names are kept", g -> {
+            g.reply(200, said("a nearby faction should help Jangala", "request_help", 0.99,
+                    ent("faction", "faction"), ent("target", "Jangala")));
+            same("<HELP:nearby:100:Jangala>", spacyClient(g.endpoint()).askNow("a nearby faction should help Jangala"),
+                    "\"faction\" dropped");
+            g.reply(200, said("spawn a Klingon fleet", "spawn_fleet", 0.99, ent("faction", "Klingon")));
+            same("<NONE>", spacyClient(g.endpoint()).askNow("spawn a Klingon fleet"), "Klingon");
+            g.reply(200, said("spawn a klingon fleet", "spawn_fleet", 0.99, ent("faction", "klingon")));
+            same("<NONE>", spacyClient(g.endpoint()).askNow("spawn a klingon fleet"), "klingon, lowercase");
+        });
+
+        test("spacy rule split: \"spawn X and send Y\" goes to the server as two pieces", g -> {
+            g.reply(200, said("spawn a small pirate patrol", "spawn_fleet", 0.99, ent("size", "small"), ent("faction", "pirate")));
+            g.reply(200, said("send a convoy to Askonia", "trade_convoy", 0.99, ent("destination", "Askonia")));
+            same("<SPAWN:pirates:40><TRADE:independent:100:Askonia>",
+                    spacyClient(g.endpoint()).askNow("spawn a small pirate patrol and send a convoy to Askonia"), "reply");
+            same("spawn a small pirate patrol", new JSONObject(g.request(0).body).getString("text"), "first piece");
+            same("send a convoy to Askonia", new JSONObject(g.request(1).body).getString("text"), "second piece");
+        });
+
+        test("spacy rule places: ordinary words marked as places are dropped, known places kept", g -> {
+            g.reply(200, plain(said("Context: help Jangala", "request_help", 0.99, ent("target", "Context"),
+                    ent("target", "Jangala")), "Context", "Jangala"));
+            same("<HELP:nearby:100:Jangala>", spacyClient(g.endpoint()).askNow("Context: help Jangala"), "reply");
+        });
+
+        test("spacy rule roles: the place's role follows a single intent", g -> {
+            g.reply(200, said("backup for Chicomoztoc", "request_help", 0.99, ent("destination", "Chicomoztoc")));
+            same("<HELP:nearby:100:Chicomoztoc>", spacyClient(g.endpoint()).askNow("backup for Chicomoztoc"), "help");
+            g.reply(200, said("send pirates to Asharu", "spawn_fleet", 0.99, ent("faction", "pirates"), ent("target", "Asharu")));
+            same("<SPAWN:pirates:100>", spacyClient(g.endpoint()).askNow("send pirates to Asharu"), "spawn");
+            g.reply(200, said("freighters for Jangala", "trade_convoy", 0.99, ent("target", "Jangala")));
+            same("<TRADE:independent:100:Jangala>", spacyClient(g.endpoint()).askNow("freighters for Jangala"), "trade");
+        });
+
+        test("spacy rule size: a size missed in a short command is looked up", g -> {
+            g.reply(200, said("a gigantic tri-tachyon fleet", "spawn_fleet", 0.99, ent("faction", "tri-tachyon")));
+            same("<SPAWN:tritachyon:300>", spacyClient(g.endpoint()).askNow("a gigantic tri-tachyon fleet"), "reply");
+        });
+
+        test("spacy rule count: a count above 10 is a size", g -> {
+            g.reply(200, said("SPAWN PIRATES 200", "spawn_fleet", 0.99, ent("faction", "PIRATES"), ent("count", "200")));
+            same("<SPAWN:pirates:200>", spacyClient(g.endpoint()).askNow("SPAWN PIRATES 200"), "reply");
+        });
+
+        test("spacy rules: spacy.rules picks them; \"none\" reads the model's answer as it is", g -> {
+            same(new java.util.LinkedHashSet<>(SpacyClient.ALL_RULES), SpacyClient.readRules("all"), "all");
+            same(new java.util.LinkedHashSet<>(SpacyClient.DEFAULT_RULES), SpacyClient.readRules(null), "default");
+            same(new java.util.LinkedHashSet<>(java.util.Arrays.asList("cancel", "size")),
+                    SpacyClient.readRules(new JSONArray().put("Cancel").put("size").put("nonsense")), "list");
+            same(java.util.Collections.singleton("count"), SpacyClient.readRules(" count "), "text");
+            JSONObject cfg = new JSONObject().put("spacy", new JSONObject().put("url", g.endpoint()).put("rules", "none"));
+            g.reply(200, said("a gigantic tri-tachyon fleet", "spawn_fleet", 0.99, ent("size", "gigantic")));
+            same("<NONE>", new SpacyClient(cfg).askNow("a gigantic tri-tachyon fleet"), "no faction lookup");
+        });
+
+        test("spacy: the answer arrives on its own daemon worker thread", g -> {
+            g.reply(200, parse("request_help", 0.9, ent("target", "Jangala")));
+            Calls calls = new Calls();
+            spacyClient(g.endpoint()).ask("Jangala needs help", calls);
+            Calls.Call call = calls.next();
+            check(call.ok, "expected onResponse, got " + call.text);
+            same("<HELP:nearby:100:Jangala>", call.text, "reply");
+            same("KirizsKeve-SpacyClient", call.thread.getName(), "thread name");
+            check(call.thread.isDaemon(), "worker must be a daemon thread");
         });
     }
 
@@ -328,6 +465,10 @@ public class RasaClientTest {
         return new RasaClient(new JSONObject().put("rasa", r));
     }
 
+    private static SpacyClient spacyClient(String url) throws Exception {
+        return new SpacyClient(new JSONObject().put("spacy", new JSONObject().put("url", url)));
+    }
+
     private static String[] ent(String... fields) {
         return fields;
     }
@@ -345,6 +486,34 @@ public class RasaClientTest {
             return new JSONObject().put("text", "t")
                     .put("intent", new JSONObject().put("name", intent).put("confidence", confidence))
                     .put("entities", list).toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** A parse of the given sentence, with an intent ranking: the intent first, then out_of_scope. */
+    private static String said(String text, String intent, double confidence, String[]... entities) {
+        try {
+            return new JSONObject(parse(intent, confidence, entities)).put("text", text)
+                    .put("intent_ranking", new JSONArray()
+                            .put(new JSONObject().put("name", intent).put("confidence", confidence))
+                            .put(new JSONObject().put("name", "out_of_scope").put("confidence", 1 - confidence)))
+                    .toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The parse with "plain_word": true on the entities with these values, as the server's rules mark them. */
+    private static String plain(String parse, String... values) {
+        try {
+            JSONObject p = new JSONObject(parse);
+            JSONArray entities = p.getJSONArray("entities");
+            for (int i = 0; i < entities.length(); i++) {
+                JSONObject e = entities.getJSONObject(i);
+                if (java.util.Arrays.asList(values).contains(e.optString("value"))) e.put("plain_word", true);
+            }
+            return p.toString();
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

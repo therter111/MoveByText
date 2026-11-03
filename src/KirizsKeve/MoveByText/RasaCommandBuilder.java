@@ -23,6 +23,8 @@ import java.util.Set;
  *
  * Several fleets come as Rasa entity groups ("1", "2", ...). An entity without a group applies to every fleet
  * that doesn't have its own, so "two convoys to Jangala, one from Asharu and one from Askonia" works.
+ *
+ * The spaCy server (SpacyClient) answers in the same format, so this serves both.
  */
 final class RasaCommandBuilder {
 
@@ -334,6 +336,12 @@ final class RasaCommandBuilder {
         if (s.isEmpty()) return null;
         if (s.equals(s.toLowerCase()) && !KNOWN_PLACES.contains(s)) return null;
         return s;
+    }
+
+    /** True for a vanilla Starsector system or market ("Jangala", "the Askonia system"). */
+    static boolean isKnownPlace(String name) {
+        String p = place(name);
+        return p != null && KNOWN_PLACES.contains(p.toLowerCase());
     }
 
     /** Vanilla Starsector systems and markets, lowercase, for accepting names the player didn't capitalize. */
