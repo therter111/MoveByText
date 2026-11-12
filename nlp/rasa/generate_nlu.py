@@ -3,7 +3,7 @@
 The examples come from templates filled with factions, sizes, numbers and Starsector places. Only the parts that
 belong to the command are labelled (the faction whose ships are wanted, the size, the places); factions, numbers and
 size words in stories, opinions and enemy descriptions are left unlabelled on purpose, so the model learns to tell
-them apart. The Java side (RasaCommandBuilder) turns the labels into game commands.
+them apart. The Java side (CommandBuilder) turns the labels into game commands.
 
 This script never reads the test cases in test/. check_overlap.py removes any example that happens to be identical
 to a test message, so the tests stay a fair check.
@@ -23,7 +23,7 @@ RNG = random.Random(42)
 # Vocabulary
 # ---------------------------------------------------------------------------------------------------------------------
 
-# How the player names a faction whose ships are wanted. RasaCommandBuilder.FactionNames maps these to the ids.
+# How the player names a faction whose ships are wanted. FactionNames (Java) maps these to the ids.
 FACTIONS = {
     "pirates": ["pirate", "pirates", "Pirate", "Kanta's raiders", "raider", "raiders", "Kanta's pirates", "pirate raiders"],
     "hegemony": ["hegemony", "Hegemony", "Hegemony navy", "XIV Battlegroup", "hegemony navy", "AI Inspectorate"],

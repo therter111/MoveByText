@@ -1,6 +1,6 @@
 """The spaCy NLU server the mod talks to (provider "spacy" in data/config/llmdata.json).
 
-Answers like a Rasa server, so the mod reads both the same way (SpacyClient, RasaCommandBuilder):
+Answers like a Rasa server, so the mod reads both the same way (SpacyClient, CommandBuilder):
     POST /model/parse  {"text": "spawn a small pirate fleet"}
         -> {"text": ..., "intent": {"name": "spawn_fleet", "confidence": 0.98}, "intent_ranking": [...],
             "entities": [{"entity": "size", "value": "small", "start": 8, "end": 13}, ...]}

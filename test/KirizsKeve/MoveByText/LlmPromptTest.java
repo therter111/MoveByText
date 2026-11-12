@@ -1,11 +1,8 @@
 package KirizsKeve.MoveByText;
 
+import KirizsKeve.MoveByText.nlp.AbstractBackend;
 import KirizsKeve.MoveByText.nlp.LlmBackend;
-import KirizsKeve.MoveByText.nlp.NluServerClient;
-import KirizsKeve.MoveByText.nlp.gemini.LlmClient;
-import KirizsKeve.MoveByText.nlp.koboldcpp.KoboldCppClient;
-import KirizsKeve.MoveByText.nlp.rasa.RasaClient;
-import KirizsKeve.MoveByText.nlp.spacy.SpacyClient;
+import KirizsKeve.MoveByText.nlp.Provider;
 import org.json.JSONObject;
 
 import java.net.SocketTimeoutException;
@@ -268,9 +265,10 @@ public class LlmPromptTest {
 
         Path config = Paths.get(configPath);
         JSONObject cfg = readConfig(config);
-        LlmBackend llm = LlmBackend.fromConfig(cfg);
-        if (llm instanceof LlmClient) ((LlmClient) llm).readTimeoutMs = READ_TIMEOUT_MS; // KoboldCpp: koboldcpp.timeoutSeconds
-        rateLimited = !(llm instanceof KoboldCppClient || llm instanceof NluServerClient); // local servers have no rate limit
+        Provider provider = Provider.of(cfg);
+        LlmBackend llm = provider.create(cfg);
+        if (provider == Provider.GEMINI) ((AbstractBackend) llm).setReadTimeoutMs(READ_TIMEOUT_MS); // the others: their timeoutSeconds
+        rateLimited = provider == Provider.GEMINI; // local servers have no rate limit
         if (!llm.isConfigured()) {
             System.out.println("LLM not configured, check " + config.toAbsolutePath());
             System.exit(1);
@@ -286,9 +284,8 @@ public class LlmPromptTest {
         }
 
         // separate log files per provider
-        String provider = llm instanceof KoboldCppClient ? "koboldcpp" : llm instanceof RasaClient ? "rasa"
-                : llm instanceof SpacyClient ? "spacy" : null;
-        LlmTestReport report = new LlmTestReport(LOG_DIR, provider, modelLabel(llm), cfg.optString("systemPrompt", ""),
+        String providerName = provider == Provider.GEMINI ? null : provider.id();
+        LlmTestReport report = new LlmTestReport(LOG_DIR, providerName, modelLabel(llm), cfg.optString("systemPrompt", ""),
                 filter, groupOfEachCase, CASES.size());
         System.out.println("Writing the results to " + report.file().toAbsolutePath());
 
@@ -382,8 +379,7 @@ public class LlmPromptTest {
      */
     private static String modelLabel(LlmBackend llm) {
         try {
-            if (llm instanceof KoboldCppClient) return ((KoboldCppClient) llm).loadedModel();
-            if (llm instanceof NluServerClient) return ((NluServerClient) llm).loadedModel();
+            return llm.loadedModel();
         } catch (Exception e) {
             System.out.println("Could not ask the server which model is loaded: " + e.getMessage());
         }

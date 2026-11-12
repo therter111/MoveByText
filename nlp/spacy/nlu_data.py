@@ -104,7 +104,7 @@ REQUEST_INTENTS = {"spawn_fleet", "trade_convoy", "request_help"}
 
 
 def is_request(intent):
-    """Like RasaCommandBuilder.isRequest: "spawn_fleet+trade_convoy" is a request too."""
+    """Like CommandBuilder.isRequest (Java): "spawn_fleet+trade_convoy" is a request too."""
     return any(part in REQUEST_INTENTS for part in intent.split("+"))
 
 

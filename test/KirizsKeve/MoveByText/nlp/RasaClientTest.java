@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  * Offline tests for RasaClient: settings, the /model/parse request, turning the answer into tags, errors, /status
  * and the background thread. A fake Rasa server runs on localhost, so Rasa doesn't need to be installed.
  * The "spacy:" cases check SpacyClient, which shares all of this (NluServerClient) and talks to the same format.
- * RasaCommandBuilderTest covers the entity rules in detail.
+ * CommandBuilderTest covers the entity rules in detail.
  *
  * Run main() from IntelliJ (working directory = the mod folder). Pass a word to run only matching tests.
  */
@@ -56,19 +56,19 @@ public class RasaClientTest {
 
     static {
         test("provider: \"rasa\" -> RasaClient, and the example file's rasa block works", g -> {
-            check(LlmBackend.fromConfig(new JSONObject().put("provider", " Rasa ")) instanceof RasaClient, "provider Rasa");
+            check(Provider.backendFor(new JSONObject().put("provider", " Rasa ")) instanceof RasaClient, "provider Rasa");
             JSONObject example = LlmPromptTest.readConfig(Paths.get("data/config/llmdata.json.example"));
             check(example.has("rasa"), "the example file should have a rasa block");
-            LlmBackend llm = LlmBackend.fromConfig(example.put("provider", "rasa"));
+            LlmBackend llm = Provider.backendFor(example.put("provider", "rasa"));
             check(llm instanceof RasaClient && llm.isConfigured(), "the example's rasa block should give a ready RasaClient");
         });
 
         test("config: everything optional; defaults are localhost:5005, 0.5 and 30 s", g -> {
             RasaClient llm = new RasaClient(new JSONObject());
             check(llm.isConfigured(), "a client without settings should still be ready");
-            same(30000, llm.readTimeoutMs, "read timeout");
+            same(30000, llm.readTimeoutMs(), "read timeout");
             same("Rasa NLU", llm.modelName(), "modelName()");
-            same("http://127.0.0.1:5005", llm.url, "url");
+            same("http://127.0.0.1:5005", llm.url(), "url");
         });
 
         test("config: url forms are normalized", g -> {
@@ -142,7 +142,7 @@ public class RasaClientTest {
         test("http: slower than the timeout -> SocketTimeoutException", g -> {
             g.replyAfter(2000, 200, parse("out_of_scope", 0.9));
             RasaClient llm = client(g, g.endpoint(), null);
-            llm.readTimeoutMs = 300;
+            llm.setReadTimeoutMs(300);
             Throwable e = fails(() -> llm.askNow("hi"), "slow server");
             check(e instanceof SocketTimeoutException, "expected SocketTimeoutException, got " + e);
         });
@@ -181,18 +181,18 @@ public class RasaClientTest {
         // spaCy: the same client with its own settings block, address and names
 
         test("spacy: provider \"spacy\" -> SpacyClient, and the example file's spacy block works", g -> {
-            check(LlmBackend.fromConfig(new JSONObject().put("provider", " spaCy ")) instanceof SpacyClient, "provider spaCy");
+            check(Provider.backendFor(new JSONObject().put("provider", " spaCy ")) instanceof SpacyClient, "provider spaCy");
             JSONObject example = LlmPromptTest.readConfig(Paths.get("data/config/llmdata.json.example"));
             check(example.has("spacy"), "the example file should have a spacy block");
-            LlmBackend llm = LlmBackend.fromConfig(example.put("provider", "spacy"));
+            LlmBackend llm = Provider.backendFor(example.put("provider", "spacy"));
             check(llm instanceof SpacyClient && llm.isConfigured(), "the example's spacy block should give a ready SpacyClient");
         });
 
         test("spacy: defaults are localhost:5007, 30 s, \"spaCy NLU\"", g -> {
             SpacyClient llm = new SpacyClient(new JSONObject());
             check(llm.isConfigured(), "a client without settings should still be ready");
-            same("http://127.0.0.1:5007", llm.url, "url");
-            same(30000, llm.readTimeoutMs, "read timeout");
+            same("http://127.0.0.1:5007", llm.url(), "url");
+            same(30000, llm.readTimeoutMs(), "read timeout");
             same("spaCy NLU", llm.modelName(), "modelName()");
         });
 

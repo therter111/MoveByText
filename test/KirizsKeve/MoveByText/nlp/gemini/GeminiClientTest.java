@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Offline tests for LlmClient: reading the settings, the HTTP request it builds, how it reads Gemini's
+ * Offline tests for GeminiClient: reading the settings, the HTTP request it builds, how it reads Gemini's
  * replies and errors, the async ask() path, the conversation history and clearHistory().
  *
  * A fake Gemini server runs on localhost, so no API key or network is needed and nothing in the game
@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Run main() from IntelliJ (working directory = the mod folder). Pass a word as the first argument to run
  * only the tests whose name contains it, e.g. "history". Exits with code 1 if any test fails.
  */
-public class LlmClientTest {
+public class GeminiClientTest {
 
     private static final String KEY = "test-key-123";
     private static final String MODEL = "gemini-test";
@@ -86,7 +86,7 @@ public class LlmClientTest {
         });
 
         test("config: empty settings -> all three reported missing, in order, nothing sent", g -> {
-            LlmClient llm = new LlmClient(new JSONObject(), g.endpoint());
+            GeminiClient llm = new GeminiClient(new JSONObject(), g.endpoint());
             check(!llm.isConfigured(), "a client without settings must not be configured");
 
             Throwable e = fails(() -> llm.askNow("hi"), "askNow on an unconfigured client");
@@ -104,7 +104,7 @@ public class LlmClientTest {
                     {KEY, null, null, "model systemPrompt"},
             };
             for (String[] c : cases) {
-                LlmClient llm = new LlmClient(config(c[0], c[1], c[2]), g.endpoint());
+                GeminiClient llm = new GeminiClient(config(c[0], c[1], c[2]), g.endpoint());
                 check(!llm.isConfigured(), "missing '" + c[3] + "' must leave the client unconfigured");
                 Throwable e = fails(() -> llm.askNow("hi"), "askNow with '" + c[3] + "' missing");
                 same("LLM not configured. Missing in " + CONFIG_FILE + ": " + c[3], e.getMessage(), "message for missing " + c[3]);
@@ -114,7 +114,7 @@ public class LlmClientTest {
 
         test("config: blank values count as missing", g -> {
             for (String blank : new String[]{"", " ", "\t", "\n  \r\n"}) {
-                LlmClient llm = new LlmClient(config(blank, blank, blank), g.endpoint());
+                GeminiClient llm = new GeminiClient(config(blank, blank, blank), g.endpoint());
                 check(!llm.isConfigured(), "blank value " + show(blank) + " must count as missing");
                 has(fails(() -> llm.askNow("hi"), "askNow with blank settings").getMessage(),
                         ": apiKey model systemPrompt", "message for blank " + show(blank));
@@ -123,7 +123,7 @@ public class LlmClientTest {
 
         test("config: the PASTE_ template placeholder key counts as missing", g -> {
             for (String key : new String[]{"PASTE_YOUR_KEY_HERE", "PASTE_", "  PASTE_KEY  "}) {
-                LlmClient llm = new LlmClient(config(key, MODEL, PROMPT), g.endpoint());
+                GeminiClient llm = new GeminiClient(config(key, MODEL, PROMPT), g.endpoint());
                 check(!llm.isConfigured(), "placeholder key " + show(key) + " must count as missing");
                 same("LLM not configured. Missing in " + CONFIG_FILE + ": apiKey",
                         fails(() -> llm.askNow("hi"), "askNow with placeholder key").getMessage(), "message for " + show(key));
@@ -131,7 +131,7 @@ public class LlmClientTest {
         });
 
         test("config: a key that only contains PASTE_ further in is accepted", g -> {
-            check(new LlmClient(config("abc-PASTE_-xyz", MODEL, PROMPT), g.endpoint()).isConfigured(),
+            check(new GeminiClient(config("abc-PASTE_-xyz", MODEL, PROMPT), g.endpoint()).isConfigured(),
                     "only a key that STARTS with PASTE_ is the placeholder");
         });
 
@@ -139,7 +139,7 @@ public class LlmClientTest {
             // Someone who copies the example without pasting a key should get "missing apiKey",
             // not a request to Google with a fake key
             JSONObject example = LlmPromptTest.readConfig(Paths.get(EXAMPLE_CONFIG));
-            LlmClient llm = new LlmClient(example, g.endpoint());
+            GeminiClient llm = new GeminiClient(example, g.endpoint());
             check(!llm.isConfigured(), "the example's apiKey " + show(example.optString("apiKey"))
                     + " is accepted as a real key - it should be a PASTE_ placeholder");
             same("LLM not configured. Missing in " + CONFIG_FILE + ": apiKey",
@@ -148,7 +148,7 @@ public class LlmClientTest {
         });
 
         test("config: values are trimmed before use", g -> {
-            LlmClient llm = new LlmClient(config("  " + KEY + " \n", "\t" + MODEL + " ", "\n  " + PROMPT + "  \n"), g.endpoint());
+            GeminiClient llm = new GeminiClient(config("  " + KEY + " \n", "\t" + MODEL + " ", "\n  " + PROMPT + "  \n"), g.endpoint());
             llm.askNow("hi");
             Request r = g.only();
             same("/v1beta/models/" + MODEL + ":generateContent", r.uri.getPath(), "request path (model trimmed)");
@@ -161,7 +161,7 @@ public class LlmClientTest {
             for (int i = 0; i < values.length; i++) {
                 JSONObject cfg = config(KEY, MODEL, PROMPT);
                 if (values[i] != null) cfg.put("maxOutputTokens", values[i]);
-                new LlmClient(cfg, g.endpoint()).askNow("hi");
+                new GeminiClient(cfg, g.endpoint()).askNow("hi");
                 check(!g.request(i).json().has("generationConfig"),
                         "maxOutputTokens=" + values[i] + " must leave generationConfig out, body: " + g.request(i).body);
             }
@@ -170,7 +170,7 @@ public class LlmClientTest {
         test("config: maxOutputTokens > 0 -> sent as generationConfig.maxOutputTokens", g -> {
             int[] values = {1, 256, 1024, 65536};
             for (int i = 0; i < values.length; i++) {
-                new LlmClient(config(KEY, MODEL, PROMPT).put("maxOutputTokens", values[i]), g.endpoint()).askNow("hi");
+                new GeminiClient(config(KEY, MODEL, PROMPT).put("maxOutputTokens", values[i]), g.endpoint()).askNow("hi");
                 JSONObject gen = g.request(i).json().getJSONObject("generationConfig");
                 same(values[i], gen.getInt("maxOutputTokens"), "generationConfig.maxOutputTokens");
                 same(Collections.singleton("maxOutputTokens"), keys(gen), "generationConfig fields");
@@ -179,10 +179,10 @@ public class LlmClientTest {
 
         test("config: maxOutputTokens written as text", g -> {
             // A number in quotes still works; words are ignored like a missing setting
-            new LlmClient(config(KEY, MODEL, PROMPT).put("maxOutputTokens", "512"), g.endpoint()).askNow("hi");
+            new GeminiClient(config(KEY, MODEL, PROMPT).put("maxOutputTokens", "512"), g.endpoint()).askNow("hi");
             same(512, g.request(0).json().getJSONObject("generationConfig").getInt("maxOutputTokens"), "\"512\" as text");
 
-            new LlmClient(config(KEY, MODEL, PROMPT).put("maxOutputTokens", "lots"), g.endpoint()).askNow("hi");
+            new GeminiClient(config(KEY, MODEL, PROMPT).put("maxOutputTokens", "lots"), g.endpoint()).askNow("hi");
             check(!g.request(1).json().has("generationConfig"), "\"lots\" must be ignored, body: " + g.request(1).body);
         });
     }
@@ -236,7 +236,7 @@ public class LlmClientTest {
                     "emoji " + EMOJI + " and CJK " + CJK,
                     "control \u0000 \u0001 \u001f and \u2028 separators",
             };
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             for (int i = 0; i < inputs.length; i++) {
                 llm.askNow(inputs[i]);
                 Request r = g.request(i);
@@ -247,7 +247,7 @@ public class LlmClientTest {
 
         test("request: tricky system prompt reaches the server unchanged", g -> {
             String prompt = "Rules:\n1. \"quotes\" \\ backslashes\n2. <TAGS:like:this>\n3. " + HUNGARIAN + EMOJI + CJK;
-            new LlmClient(config(KEY, MODEL, prompt), g.endpoint()).askNow("hi");
+            new GeminiClient(config(KEY, MODEL, prompt), g.endpoint()).askNow("hi");
             same(prompt, systemPrompt(g.only()), "system prompt");
         });
 
@@ -258,7 +258,7 @@ public class LlmClientTest {
         });
 
         test("request: askNow keeps no history between calls", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             llm.askNow("one");
             llm.askNow("two");
             same(Collections.singletonList("user: two"), turns(g.request(1)), "contents of the second request");
@@ -315,7 +315,7 @@ public class LlmClientTest {
         });
 
         test("reply: bodies around the 8 KB read buffer are read whole", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             int[] sizes = {200, 8191, 8192, 8193, 16383, 16384, 16385, 65536, 1000000};
             for (int size : sizes) {
                 int filler = size - answer("").getBytes(StandardCharsets.UTF_8).length;
@@ -329,7 +329,7 @@ public class LlmClientTest {
 
         test("reply: multi-byte characters split by the read buffer survive", g -> {
             // Put a 3-byte character where the 8192 / 16384 byte buffer edges cut through it
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             byte[] ch = THREE_BYTE_CHAR.getBytes(StandardCharsets.UTF_8);
             for (int start : new int[]{8190, 8191, 16382, 16383}) {
                 int base = indexOf(answer(THREE_BYTE_CHAR + " tail").getBytes(StandardCharsets.UTF_8), ch);
@@ -405,7 +405,7 @@ public class LlmClientTest {
     static {
         test("http: error statuses -> 'Gemini API returned HTTP <code>: <body>'", g -> {
             // LlmPromptTest retries when the message contains "HTTP 429" or "HTTP 503", so the format matters
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             for (int code : new int[]{400, 401, 403, 404, 429, 500, 503}) {
                 String body = "{\"error\":{\"code\":" + code + ",\"message\":\"failure " + code + "\",\"status\":\"X\"}}";
                 g.reply(code, body);
@@ -422,17 +422,17 @@ public class LlmClientTest {
         });
 
         test("http: nothing listening -> connection error", g -> {
-            LlmClient llm = new LlmClient(config(KEY, MODEL, PROMPT), closedEndpoint());
+            GeminiClient llm = new GeminiClient(config(KEY, MODEL, PROMPT), closedEndpoint());
             Throwable e = fails(() -> llm.askNow("hi"), "askNow to a closed port");
             check(e instanceof ConnectException, "expected a ConnectException, got " + e);
         });
 
         test("http: server slower than readTimeoutMs -> read timeout", g -> {
-            same(60000, client(g).readTimeoutMs, "default read timeout the game uses");
+            same(60000, client(g).readTimeoutMs(), "default read timeout the game uses");
 
             g.replyAfter(2000, 200, answer("too late"));
-            LlmClient llm = client(g);
-            llm.readTimeoutMs = 300;
+            GeminiClient llm = client(g);
+            llm.setReadTimeoutMs(300);
             long start = System.nanoTime();
             Throwable e = fails(() -> llm.askNow("hi"), "askNow to a server slower than the timeout");
             long tookMs = (System.nanoTime() - start) / 1000000;
@@ -448,7 +448,7 @@ public class LlmClientTest {
     static {
         test("ask: not configured -> onError at once on the caller's thread, nothing sent", g -> {
             Calls calls = new Calls();
-            new LlmClient(config(null, MODEL, PROMPT), g.endpoint()).ask("hi", calls);
+            new GeminiClient(config(null, MODEL, PROMPT), g.endpoint()).ask("hi", calls);
 
             Calls.Call call = calls.calls.poll(); // no waiting: it must already be there
             check(call != null, "onError should be called before ask() returns");
@@ -467,7 +467,7 @@ public class LlmClientTest {
             Calls.Call call = calls.next();
             check(call.ok, "expected onResponse, got onError: " + call.text);
             same("<SPAWN:pirates:40>", call.text, "reply");
-            same("KirizsKeve-LlmClient", call.thread.getName(), "callback thread name");
+            same("KirizsKeve-GeminiClient", call.thread.getName(), "callback thread name");
             check(call.thread.isDaemon(), "the worker thread must be a daemon so it never keeps the game running");
             check(call.thread != Thread.currentThread(), "the callback must not run on the caller's thread");
         });
@@ -506,14 +506,14 @@ public class LlmClientTest {
 
         test("ask: connection failure -> onError with a message", g -> {
             Calls calls = new Calls();
-            new LlmClient(config(KEY, MODEL, PROMPT), closedEndpoint()).ask("hi", calls);
+            new GeminiClient(config(KEY, MODEL, PROMPT), closedEndpoint()).ask("hi", calls);
             String message = calls.error();
             check(message != null && !message.trim().isEmpty(), "error message is empty");
         });
 
         test("ask: requests run one at a time, in the order asked", g -> {
             for (int i = 1; i <= 5; i++) g.replyAfter(150, 200, answer("r" + i));
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             Calls calls = new Calls();
             for (int i = 1; i <= 5; i++) llm.ask("m" + i, calls);
 
@@ -523,7 +523,7 @@ public class LlmClientTest {
         });
 
         test("ask: a callback that throws doesn't stop later requests", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             llm.ask("first", new LlmBackend.Callback() {
                 @Override
                 public void onResponse(String text) {
@@ -548,7 +548,7 @@ public class LlmClientTest {
     static {
         test("history: the previous exchange is sent with the next request", g -> {
             g.reply(answer("  R1 \n"));
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             exchange(llm, "first");
             exchange(llm, "second");
             same(Collections.singletonList("user: first"), turns(g.request(0)), "contents of request 1");
@@ -558,7 +558,7 @@ public class LlmClientTest {
 
         test("history: a failed request is not remembered", g -> {
             g.reply(500, "{}");
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             Calls calls = new Calls();
             llm.ask("lost", calls);
             calls.error();
@@ -568,7 +568,7 @@ public class LlmClientTest {
 
         test("history: a reply without an answer is not remembered", g -> {
             g.reply("{\"candidates\":[]}");
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             Calls calls = new Calls();
             llm.ask("lost", calls);
             calls.error();
@@ -577,28 +577,28 @@ public class LlmClientTest {
         });
 
         test("history: up to 20 messages are kept whole", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             conversation(g, llm, 10);
             exchange(llm, "q11");
             same(expectedTurns(1, 11), turns(g.last()), "contents of request 11");
         });
 
         test("history: past 20 messages the oldest exchange is dropped as a pair", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             conversation(g, llm, 11);
             exchange(llm, "q12");
             same(expectedTurns(2, 12), turns(g.last()), "contents of request 12");
         });
 
         test("history: a long conversation keeps the last 10 exchanges, starting with a user turn", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             conversation(g, llm, 25);
             exchange(llm, "q26");
             same(expectedTurns(16, 26), turns(g.last()), "contents of request 26");
         });
 
         test("history: clearHistory forgets the conversation", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             exchange(llm, "a");
             exchange(llm, "b");
             llm.clearHistory();
@@ -609,7 +609,7 @@ public class LlmClientTest {
         test("history: clearHistory waits for asks queued before it", g -> {
             // Called while "a" is still at the server: "a" must still be answered and then be forgotten
             g.replyAfter(300, 200, answer("A"));
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             Calls first = new Calls(), second = new Calls();
             llm.ask("a", first);
             llm.clearHistory();
@@ -620,14 +620,14 @@ public class LlmClientTest {
         });
 
         test("history: clearHistory on a fresh client is harmless", g -> {
-            LlmClient llm = client(g);
+            GeminiClient llm = client(g);
             llm.clearHistory();
             same("<NONE>", exchange(llm, "hi"), "reply");
             same(Collections.singletonList("user: hi"), turns(g.only()), "contents");
         });
 
         test("history: separate clients keep separate histories", g -> {
-            LlmClient a = client(g), b = client(g);
+            GeminiClient a = client(g), b = client(g);
             exchange(a, "for a");
             exchange(b, "for b");
             same(Collections.singletonList("user: for b"), turns(g.request(1)), "contents of client b's request");
@@ -639,7 +639,7 @@ public class LlmClientTest {
     // ------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
-        BasicConfigurator.configure(new NullAppender()); // LlmClient logs every request; keep the output to results
+        BasicConfigurator.configure(new NullAppender()); // GeminiClient logs every request; keep the output to results
         String filter = args.length > 0 ? args[0] : null;
 
         int run = 0, failed = 0;
@@ -876,8 +876,8 @@ public class LlmClientTest {
         return cfg;
     }
 
-    private static LlmClient client(FakeGemini gemini) throws Exception {
-        return new LlmClient(config(KEY, MODEL, PROMPT), gemini.endpoint());
+    private static GeminiClient client(FakeGemini gemini) throws Exception {
+        return new GeminiClient(config(KEY, MODEL, PROMPT), gemini.endpoint());
     }
 
     /** An endpoint on a port nothing listens on. */
@@ -909,14 +909,14 @@ public class LlmClientTest {
     }
 
     /** ask() and wait for the answer. */
-    private static String exchange(LlmClient llm, String text) throws InterruptedException {
+    private static String exchange(GeminiClient llm, String text) throws InterruptedException {
         Calls calls = new Calls();
         llm.ask(text, calls);
         return calls.response();
     }
 
     /** n exchanges "q1"/"r1" ... "qn"/"rn". */
-    private static void conversation(FakeGemini gemini, LlmClient llm, int n) throws Exception {
+    private static void conversation(FakeGemini gemini, GeminiClient llm, int n) throws Exception {
         for (int i = 1; i <= n; i++) {
             gemini.reply(answer("r" + i));
             same("r" + i, exchange(llm, "q" + i), "reply #" + i);

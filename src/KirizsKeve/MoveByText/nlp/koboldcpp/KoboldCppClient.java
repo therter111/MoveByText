@@ -1,30 +1,19 @@
 package KirizsKeve.MoveByText.nlp.koboldcpp;
 
-import KirizsKeve.MoveByText.nlp.Http;
-import KirizsKeve.MoveByText.nlp.LlmBackend;
-import com.fs.starfarer.api.Global;
-import org.apache.log4j.Logger;
+import KirizsKeve.MoveByText.nlp.ChatBackend;
+import KirizsKeve.MoveByText.nlp.ChatHistory;
+import KirizsKeve.MoveByText.nlp.HttpEndpoint;
+import KirizsKeve.MoveByText.nlp.Settings;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.ConnectException;
 import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
-import java.net.URL;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Sends text to a KoboldCpp server (e.g. Qwen 3.5 9B on another PC, reached over Tailscale) and hands the
- * reply back through a callback. Works the same way as LlmClient, the Gemini version:
+ * reply back through a callback. Works the same way as GeminiClient (both are ChatBackends):
  *
  * - Uses only the JDK (HttpURLConnection) and the org.json that ships with Starsector.
  * - Every request runs on one background thread, so the game never freezes while waiting.
@@ -48,11 +37,8 @@ import java.util.regex.Pattern;
  *   temperature     lower = more consistent answers; KoboldCpp's default (0.7) when not set
  *   timeoutSeconds  how long to wait for an answer, default 120
  */
-public class KoboldCppClient implements LlmBackend {
+public class KoboldCppClient extends ChatBackend {
 
-    private static final Logger LOG = Global.getLogger(KoboldCppClient.class);
-
-    private static final int MAX_HISTORY_MESSAGES = 20;
     private static final int DEFAULT_MAX_OUTPUT_TOKENS = 512;
     private static final int DEFAULT_TIMEOUT_SECONDS = 120;
     private static final int CONNECT_TIMEOUT_MS = 10000;
@@ -84,55 +70,76 @@ public class KoboldCppClient implements LlmBackend {
     private final int maxOutputTokens;
     /** null = not set, so KoboldCpp uses its default. */
     private final Double temperature;
-    /** Names of required settings missing from the file, or "" when everything is there. */
-    private final String missingSettings;
-    /** How long to wait for the answer. Read from timeoutSeconds; tests may change it. */
-    int readTimeoutMs;
-
-    /** Entries are {role, text}. Only ever touched from the worker thread. */
-    private final List<String[]> history = new ArrayList<String[]>();
-
-    /** One thread = requests run one after another, so history stays in order. */
-    private final ExecutorService worker = Executors.newSingleThreadExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "KirizsKeve-KoboldCppClient");
-            t.setDaemon(true); // never keep the game process alive
-            return t;
-        }
-    });
+    /** null when koboldcpp.url is missing. */
+    private final HttpEndpoint kobold;
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     public KoboldCppClient() {
-        this(LlmBackend.loadConfig());
+        this(Settings.load());
     }
 
     /** Takes the settings directly, so tests can run outside the game. */
     public KoboldCppClient(JSONObject cfg) {
-        JSONObject k = cfg.optJSONObject("koboldcpp");
-        if (k == null) k = new JSONObject();
+        this(new Settings(cfg));
+    }
 
-        this.url = normalizeUrl(clean(k.optString("url", null)));
-        this.password = clean(k.optString("password", null));
-        this.systemPrompt = clean(cfg.optString("systemPrompt", null));
-        this.think = k.optBoolean("think", false);
-        this.maxOutputTokens = k.optInt("maxOutputTokens", DEFAULT_MAX_OUTPUT_TOKENS);
+    private KoboldCppClient(Settings root) {
+        super(root.block("koboldcpp").timeoutMs("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS), "assistant");
+        Settings k = root.block("koboldcpp");
 
-        double temp = k.optDouble("temperature", Double.NaN);
+        this.url = normalizeUrl(k.text("url"));
+        this.password = k.text("password");
+        this.systemPrompt = root.text("systemPrompt");
+        this.think = k.flag("think", false);
+        this.maxOutputTokens = k.integer("maxOutputTokens", DEFAULT_MAX_OUTPUT_TOKENS);
+
+        double temp = k.number("temperature", Double.NaN);
         this.temperature = (Double.isNaN(temp) || temp < 0) ? null : Double.valueOf(temp);
 
-        int timeoutSeconds = k.optInt("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS);
-        this.readTimeoutMs = (timeoutSeconds > 0 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS) * 1000;
+        require("koboldcpp.url", url);
+        require("systemPrompt", systemPrompt);
 
-        String missing = "";
-        if (url == null) missing += " koboldcpp.url";
-        if (systemPrompt == null) missing += " systemPrompt";
-        this.missingSettings = missing;
+        this.kobold = url == null ? null : new KoboldEndpoint();
+        logReady(" at " + url + (think ? " (thinking on)" : ""));
+    }
 
-        if (missing.isEmpty()) {
-            LOG.info("KoboldCppClient ready at " + url + (think ? " (thinking on)" : ""));
-        } else {
-            LOG.warn("KoboldCppClient NOT ready. Missing in " + CONFIG_FILE + ":" + missing);
+    /** KoboldCpp's server: the password as a bearer token, and what to check when it can't be reached. */
+    private final class KoboldEndpoint extends HttpEndpoint {
+        KoboldEndpoint() {
+            super(url, CONNECT_TIMEOUT_MS);
+        }
+
+        @Override
+        protected void prepare(HttpURLConnection conn) {
+            if (password != null) {
+                conn.setRequestProperty("Authorization", "Bearer " + password); // header keeps it out of URLs/logs
+            }
+        }
+
+        @Override
+        protected String cannotFind() {
+            return "Can't find " + url + ". Is Tailscale connected on this PC, and is the name in koboldcpp.url right?";
+        }
+
+        @Override
+        protected String cannotConnect() {
+            return "Can't connect to KoboldCpp at " + url + ". Is the other PC on, KoboldCpp running with the model"
+                    + " loaded, and its port (usually 5001) open in the firewall?";
+        }
+
+        @Override
+        protected String timedOut(boolean connecting, int readTimeoutMs) {
+            return connecting
+                    ? "Timed out connecting to KoboldCpp at " + url + ". Is the other PC on and Tailscale connected?"
+                    : "KoboldCpp at " + url + " gave no answer within " + readTimeoutMs / 1000
+                    + " s. It may be busy with another request; try again (or raise koboldcpp.timeoutSeconds).";
+        }
+
+        @Override
+        protected String httpError(int code, String responseText) {
+            String hint = (code == 401)
+                    ? " (KoboldCpp was started with --password: put the same password in koboldcpp.password)" : "";
+            return "KoboldCpp returned HTTP " + code + ": " + responseText + hint;
         }
     }
 
@@ -150,16 +157,9 @@ public class KoboldCppClient implements LlmBackend {
         return url;
     }
 
-    /** Trimmed text, or null when it is null or blank. */
-    private static String clean(String value) {
-        if (value == null) return null;
-        value = value.trim();
-        return value.isEmpty() ? null : value;
-    }
-
     @Override
-    public boolean isConfigured() {
-        return missingSettings.isEmpty();
+    protected String displayName() {
+        return "KoboldCpp";
     }
 
     /** KoboldCpp serves whatever model it was started with; loadedModel() asks the server for its name. */
@@ -168,85 +168,26 @@ public class KoboldCppClient implements LlmBackend {
         return "KoboldCpp";
     }
 
-    @Override
-    public void ask(final String userText, final Callback callback) {
-        if (!isConfigured()) {
-            callback.onError("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
-            return;
-        }
-
-        worker.submit(new Runnable() {
-            @Override
-            public void run() {
-                String reply = null;
-                String error = null;
-                try {
-                    reply = sendRequest(userText);
-                    remember("user", userText);
-                    remember("assistant", reply);
-                } catch (Exception e) {
-                    LOG.error("KoboldCpp request failed", e);
-                    error = (e.getMessage() != null) ? e.getMessage() : e.toString();
-                }
-
-                if (error != null) {
-                    callback.onError(error);
-                } else {
-                    callback.onResponse(reply);
-                }
-            }
-        });
-    }
-
-    @Override
-    public String askNow(String userText) throws Exception {
-        if (!isConfigured()) {
-            throw new IllegalStateException("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
-        }
-        return sendRequest(userText);
-    }
-
-    @Override
-    public void clearHistory() {
-        worker.submit(new Runnable() {
-            @Override
-            public void run() {
-                history.clear();
-            }
-        });
-    }
-
     /**
      * Asks the server which model file it has loaded, e.g. "koboldcpp/Qwen3.5-9B-Q6_K". Blocking, so for
      * tests and tools only - never call this from the game thread.
      */
+    @Override
     public String loadedModel() throws Exception {
         if (url == null) throw new IllegalStateException("koboldcpp.url is not set");
-        String response = send("GET", "/api/v1/model", null);
+        String response = kobold.send("GET", "/api/v1/model", null, readTimeoutMs());
         return new JSONObject(response).optString("result", "?");
-    }
-
-    // ------------------------------------------------------------------------------------------
-    // Internals (all run on the worker thread)
-    // ------------------------------------------------------------------------------------------
-
-    private void remember(String role, String text) {
-        history.add(new String[]{role, text});
-        // Drop the oldest user/assistant pair at a time so history always starts with a "user" message.
-        while (history.size() > MAX_HISTORY_MESSAGES) {
-            history.remove(0);
-            if (!history.isEmpty()) history.remove(0);
-        }
     }
 
     private static String turn(String role, String text) {
         return TURN_START + role + "\n" + CONTROL_TOKEN.matcher(text).replaceAll("") + TURN_END + "\n";
     }
 
-    private String sendRequest(String userText) throws Exception {
+    @Override
+    protected String request(String userText) throws Exception {
         StringBuilder prompt = new StringBuilder();
-        for (String[] t : history) {
-            prompt.append(turn(t[0], t[1]));
+        for (ChatHistory.Turn t : history()) {
+            prompt.append(turn(t.role(), t.text()));
         }
         prompt.append(turn("user", userText));
         prompt.append(think ? ANSWER_THINK : ANSWER_NO_THINK);
@@ -262,62 +203,8 @@ public class KoboldCppClient implements LlmBackend {
         body.put("trim_stop", true); // leave the stop sequence out of the reply
         body.put("replace_instruct_placeholders", false); // send player text as written, even "{{[INPUT]}}"
 
-        LOG.info("Sending HTTP request to KoboldCpp at " + url + "...");
-        return parseReply(send("POST", "/api/v1/generate", body.toString()));
-    }
-
-    /** One HTTP request; returns the body of a 200 reply and throws with a readable message otherwise. */
-    private String send(String method, String path, String body) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url + path).openConnection();
-        try {
-            conn.setRequestMethod(method);
-            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            conn.setReadTimeout(readTimeoutMs);
-            if (password != null) {
-                conn.setRequestProperty("Authorization", "Bearer " + password); // header keeps it out of URLs/logs
-            }
-
-            int code;
-            String responseText;
-            try {
-                if (body != null) {
-                    conn.setDoOutput(true);
-                    conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                    OutputStream os = conn.getOutputStream();
-                    try {
-                        os.write(body.getBytes("UTF-8"));
-                    } finally {
-                        os.close();
-                    }
-                }
-
-                code = conn.getResponseCode();
-                InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-                responseText = Http.readFully(stream);
-            } catch (UnknownHostException e) {
-                throw (UnknownHostException) new UnknownHostException("Can't find " + url
-                        + ". Is Tailscale connected on this PC, and is the name in koboldcpp.url right?").initCause(e);
-            } catch (ConnectException e) {
-                throw (ConnectException) new ConnectException("Can't connect to KoboldCpp at " + url
-                        + ". Is the other PC on, KoboldCpp running with the model loaded, and its port (usually 5001)"
-                        + " open in the firewall?").initCause(e);
-            } catch (SocketTimeoutException e) {
-                String what = String.valueOf(e.getMessage()).toLowerCase().contains("connect")
-                        ? "Timed out connecting to KoboldCpp at " + url + ". Is the other PC on and Tailscale connected?"
-                        : "KoboldCpp at " + url + " gave no answer within " + readTimeoutMs / 1000
-                        + " s. It may be busy with another request; try again (or raise koboldcpp.timeoutSeconds).";
-                throw (SocketTimeoutException) new SocketTimeoutException(what).initCause(e);
-            }
-
-            if (code != 200) {
-                String hint = (code == 401)
-                        ? " (KoboldCpp was started with --password: put the same password in koboldcpp.password)" : "";
-                throw new RuntimeException("KoboldCpp returned HTTP " + code + ": " + responseText + hint);
-            }
-            return responseText;
-        } finally {
-            conn.disconnect();
-        }
+        log().info("Sending HTTP request to KoboldCpp at " + url + "...");
+        return parseReply(kobold.send("POST", "/api/v1/generate", body.toString(), readTimeoutMs()));
     }
 
     private String parseReply(String responseText) throws Exception {

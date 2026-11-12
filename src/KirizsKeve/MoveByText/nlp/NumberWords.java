@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 
 /**
  * Reads a number the way players write it: "120", "1,000", "150.6", "-50", "ninety-five", "two hundred",
- * "a hundred and twenty-five". Used by RasaCommandBuilder, which gets the numbers as plain text from Rasa.
+ * "a hundred and twenty-five". Used by CommandBuilder, which gets the numbers as plain text from Rasa.
  */
 public final class NumberWords {
 

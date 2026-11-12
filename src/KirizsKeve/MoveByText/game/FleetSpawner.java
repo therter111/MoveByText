@@ -1,4 +1,4 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.game;
 
 import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.campaign.CampaignFleetAPI;
@@ -15,12 +15,15 @@ import com.fs.starfarer.api.impl.campaign.ids.MemFlags;
 import com.fs.starfarer.api.util.Misc;
 import org.lwjgl.util.vector.Vector2f;
 
-public class FleetOnText {
+/** Creates the fleets the commands ask for, gives them their orders and reports how it went. Game thread only. */
+public final class FleetSpawner {
 
     // How long a HELP fleet stays at its target before heading home
     private static final float HELP_DAYS = 30f;
 
-    public static void spawnAIFleet(String factionId, float combatPoints, LocationAPI location, Vector2f coordinates) {
+    private final TerminalLog log = new TerminalLog("FLEET SPAWN", FleetSpawner.class);
+
+    public void spawnAIFleet(String factionId, float combatPoints, LocationAPI location, Vector2f coordinates) {
 
         FleetParamsV3 params = new FleetParamsV3(
                 null,
@@ -57,8 +60,8 @@ public class FleetOnText {
     }
 
     // sourceMarket / destMarket may be null, then a market in that location is picked
-    public static void spawnTraderFleet(String factionId, float fleetPoints, LocationAPI localSystem, MarketAPI sourceMarket,
-                                        StarSystemAPI targetSystem, MarketAPI destMarket) {
+    public void spawnTraderFleet(String factionId, float fleetPoints, LocationAPI localSystem, MarketAPI sourceMarket,
+                                 StarSystemAPI targetSystem, MarketAPI destMarket) {
 
         if (sourceMarket == null) sourceMarket = pickMarket(localSystem, factionId);
         if (destMarket == null) destMarket = pickMarket(targetSystem, factionId);
@@ -110,12 +113,12 @@ public class FleetOnText {
 
     // factionId may be null, then the faction with the closest market that isn't hostile to the target helps.
     // targetMarket may be null when only a system or a market-less planet was named.
-    public static void spawnHelpFleet(String factionId, float combatPoints, StarSystemAPI targetSystem, MarketAPI targetMarket) {
+    public void spawnHelpFleet(String factionId, float combatPoints, StarSystemAPI targetSystem, MarketAPI targetMarket) {
 
         String protectedFactionId = protectedFaction(targetSystem, targetMarket);
         MarketAPI sourceMarket = pickHelperMarket(targetSystem, targetMarket, protectedFactionId, factionId);
         if (sourceMarket == null) {
-            writeToTerminal("HELP FAILED: no " + (factionId != null ? "'" + factionId + "' " : "friendly ")
+            log.line("HELP FAILED: no " + (factionId != null ? "'" + factionId + "' " : "friendly ")
                     + "market found to send help to " + targetSystem.getName() + ", nothing spawned");
             return;
         }
@@ -208,32 +211,27 @@ public class FleetOnText {
         return "Spawned " + faction + " " + kind;
     }
 
-    private static boolean isEmpty(CampaignFleetAPI fleet, String tag, String factionId) {
+    private boolean isEmpty(CampaignFleetAPI fleet, String tag, String factionId) {
         if (fleet != null && fleet.getFleetData().getNumMembers() > 0) return false;
-        writeToTerminal(tag + " FAILED: fleet for faction '" + factionId + "' came out empty (bad faction id or too few points?), nothing spawned");
+        log.line(tag + " FAILED: fleet for faction '" + factionId + "' came out empty (bad faction id or too few points?), nothing spawned");
         return true;
     }
 
     // Checks the fleet really landed in the location with orders, and prints the result
-    private static void verifySpawn(CampaignFleetAPI fleet, LocationAPI location, String tag, String route) {
+    private void verifySpawn(CampaignFleetAPI fleet, LocationAPI location, String tag, String route) {
         boolean inLocation = fleet.getContainingLocation() == location && location.getFleets().contains(fleet);
         boolean hasOrders = fleet.getCurrentAssignment() != null;
 
         if (!inLocation || !hasOrders) {
-            writeToTerminal(tag + " FAILED: " + fleet.getName() + " inLocation=" + inLocation + " hasOrders=" + hasOrders);
+            log.line(tag + " FAILED: " + fleet.getName() + " inLocation=" + inLocation + " hasOrders=" + hasOrders);
             return;
         }
 
-        writeToTerminal(tag + " OK: " + fleet.getName()
+        log.line(tag + " OK: " + fleet.getName()
                 + " [" + fleet.getFaction().getDisplayName() + ", " + fleet.getFleetData().getNumMembers() + " ships, "
                 + fleet.getFleetPoints() + " FP] in " + location.getName()
                 + " at (" + (int) fleet.getLocation().x + ", " + (int) fleet.getLocation().y + "), " + route
                 + ", current order: " + fleet.getCurrentAssignment().getActionText());
-    }
-
-    private static void writeToTerminal(String message) {
-        System.out.println("=== FLEET SPAWN === " + message);
-        Global.getLogger(FleetOnText.class).info(message);
     }
 
     // Prefers a market of the given faction, falls back to any visible market in the location

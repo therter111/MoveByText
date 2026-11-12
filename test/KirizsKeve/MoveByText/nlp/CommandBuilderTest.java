@@ -8,13 +8,13 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Offline tests for RasaCommandBuilder and NumberWords: Rasa answers written by hand -> the command tags the game
+ * Offline tests for CommandBuilder and NumberWords: Rasa answers written by hand -> the command tags the game
  * runs. No Rasa server is needed. To see how well the trained model reads real sentences, set "provider": "rasa"
  * in llmdata.json and run LlmPromptTest.
  *
  * Run main() from IntelliJ. Pass a word to run only the tests whose name contains it. Exits with 1 on any failure.
  */
-public class RasaCommandBuilderTest {
+public class CommandBuilderTest {
 
     private static final double MIN = 0.5;
 
@@ -45,7 +45,7 @@ public class RasaCommandBuilderTest {
         });
 
         test("intent: a missing intent object -> NONE", () -> {
-            same("<NONE>", RasaCommandBuilder.toTags(new JSONObject().put("text", "hi"), MIN), "reply");
+            same("<NONE>", new CommandBuilder(MIN).toTags(new JSONObject().put("text", "hi")), "reply");
         });
     }
 
@@ -116,7 +116,7 @@ public class RasaCommandBuilderTest {
             JSONObject p = new JSONObject().put("text", "send a convoy to Jangala")
                     .put("intent", new JSONObject().put("name", "trade_convoy").put("confidence", 0.9))
                     .put("entities", new JSONArray().put(new JSONObject().put("entity", "destination").put("start", 17).put("end", 24)));
-            same("<TRADE:independent:100:Jangala>", RasaCommandBuilder.toTags(p, MIN), "reply");
+            same("<TRADE:independent:100:Jangala>", new CommandBuilder(MIN).toTags(p), "reply");
         });
 
         test("entity types the builder doesn't know are ignored", () -> {
@@ -139,15 +139,15 @@ public class RasaCommandBuilderTest {
                     {"remnant drones", "remnants"}, {"derelict drones", "derelict"}, {"a Remnant ordo", "remnants"},
                     {"Omega", "omega"}, {"thinking machines", "remnants"},
             };
-            for (String[] c : cases) same(c[1], RasaCommandBuilder.FactionNames.resolve(c[0]), "faction " + show(c[0]));
+            for (String[] c : cases) same(c[1], FactionNames.resolve(c[0]), "faction " + show(c[0]));
         });
 
         test("factions: typos in long names are forgiven, short made-up names are not", () -> {
-            same("tritachyon", RasaCommandBuilder.FactionNames.resolve("tritachion"), "tritachion");
-            same("hegemony", RasaCommandBuilder.FactionNames.resolve("hegemonny"), "hegemonny");
-            same("pirates", RasaCommandBuilder.FactionNames.resolve("pirrates"), "pirrates");
+            same("tritachyon", FactionNames.resolve("tritachion"), "tritachion");
+            same("hegemony", FactionNames.resolve("hegemonny"), "hegemonny");
+            same("pirates", FactionNames.resolve("pirrates"), "pirrates");
             for (String f : new String[]{"Klingon", "Borg", "Zerg", "Empire", "Covenant", "Shadowyards"}) {
-                same(null, RasaCommandBuilder.FactionNames.resolve(f), "faction " + show(f));
+                same(null, FactionNames.resolve(f), "faction " + show(f));
             }
         });
     }
@@ -373,7 +373,7 @@ public class RasaCommandBuilderTest {
     }
 
     private static String tags(JSONObject parse) throws Exception {
-        return RasaCommandBuilder.toTags(parse, MIN);
+        return new CommandBuilder(MIN).toTags(parse);
     }
 
     /** A message read as several sentences. */
@@ -381,7 +381,7 @@ public class RasaCommandBuilderTest {
         java.util.List<JSONObject> list = new java.util.ArrayList<>();
         list.add(first);
         list.addAll(java.util.Arrays.asList(more));
-        return RasaCommandBuilder.toTags(list, MIN);
+        return new CommandBuilder(MIN).toTags(list);
     }
 
     private static void same(Object expected, Object actual, String what) {

@@ -7,7 +7,7 @@ examples as the Rasa model** (`../rasa/generate_nlu.py`), but start from pretrai
 (`en_core_web_md`), so words and phrasings the templates never use are less foreign to them.
 
 `server.py` answers in Rasa's `/model/parse` format, so the mod reads it like Rasa: `SpacyClient.java` sends the
-message one sentence at a time and `RasaCommandBuilder.java` turns the answers into command tags. In between,
+message one sentence at a time and `CommandBuilder.java` turns the answers into command tags. In between,
 rules fix the model's common mistakes without retraining it (see "The rules" below): some in the server
 (`rules.py`, with spaCy's pretrained English parser), the rest in `SpacyClient.java`.
 
@@ -52,7 +52,7 @@ This shows the answer after the server's rules; the rules in `SpacyClient.java` 
 ## Changing what it understands
 The templates are shared with Rasa: edit `../rasa/generate_nlu.py`, then run `train.bat` here (and `../rasa/train.bat`
 for the Rasa model) and restart the server. Faction nicknames and size words are also listed in
-`RasaCommandBuilder.java` (`FactionNames`, `SizeWords`), which does the final mapping for both.
+`FactionNames.java` and `SizeWords.java`, which do the final mapping for both.
 
 How it learns is in `config.cfg`. Messages with several fleets are labelled like `faction#1`, `size#2`, so the
 entity recognizer learns which fleet a word belongs to; `server.py` gives that back as Rasa's `group`.

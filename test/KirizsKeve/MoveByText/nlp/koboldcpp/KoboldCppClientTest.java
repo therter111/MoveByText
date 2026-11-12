@@ -2,7 +2,8 @@ package KirizsKeve.MoveByText.nlp.koboldcpp;
 
 import KirizsKeve.MoveByText.LlmPromptTest;
 import KirizsKeve.MoveByText.nlp.LlmBackend;
-import KirizsKeve.MoveByText.nlp.gemini.LlmClient;
+import KirizsKeve.MoveByText.nlp.Provider;
+import KirizsKeve.MoveByText.nlp.gemini.GeminiClient;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.log4j.BasicConfigurator;
@@ -40,7 +41,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Offline tests for KoboldCppClient and for LlmBackend picking a provider: the settings, the ChatML prompt
+ * Offline tests for KoboldCppClient and for Provider picking a backend: the settings, the ChatML prompt
  * sent to /api/v1/generate, how replies and errors are read, ask() and the conversation history.
  *
  * A fake KoboldCpp server runs on localhost, so neither the other PC nor a model is needed. To check how well
@@ -82,23 +83,23 @@ public class KoboldCppClientTest {
         test("provider: \"koboldcpp\" -> KoboldCppClient, any case and spacing", g -> {
             for (String p : new String[]{"koboldcpp", "KoboldCpp", " KOBOLDCPP "}) {
                 JSONObject cfg = config(g.endpoint(), PROMPT).put("provider", p);
-                check(LlmBackend.fromConfig(cfg) instanceof KoboldCppClient, "provider " + show(p) + " should give a KoboldCppClient");
+                check(Provider.backendFor(cfg) instanceof KoboldCppClient, "provider " + show(p) + " should give a KoboldCppClient");
             }
         });
 
-        test("provider: missing, \"gemini\" or unknown -> LlmClient (Gemini)", g -> {
+        test("provider: missing, \"gemini\" or unknown -> GeminiClient (Gemini)", g -> {
             JSONObject noProvider = config(g.endpoint(), PROMPT);
             noProvider.remove("provider");
-            check(LlmBackend.fromConfig(noProvider) instanceof LlmClient, "no provider should keep Gemini, like old settings files");
+            check(Provider.backendFor(noProvider) instanceof GeminiClient, "no provider should keep Gemini, like old settings files");
             for (String p : new String[]{"gemini", "GEMINI", "ollama", "kobold", ""}) {
                 JSONObject cfg = config(g.endpoint(), PROMPT).put("provider", p);
-                check(LlmBackend.fromConfig(cfg) instanceof LlmClient, "provider " + show(p) + " should give an LlmClient");
+                check(Provider.backendFor(cfg) instanceof GeminiClient, "provider " + show(p) + " should give a GeminiClient");
             }
         });
 
         test("provider: the shipped llmdata.json.example picks a complete KoboldCpp setup", g -> {
             JSONObject example = LlmPromptTest.readConfig(Paths.get(EXAMPLE_CONFIG));
-            LlmBackend llm = LlmBackend.fromConfig(example);
+            LlmBackend llm = Provider.backendFor(example);
             check(llm instanceof KoboldCppClient, "the example should pick KoboldCpp, got " + llm.getClass().getSimpleName());
             check(llm.isConfigured(), "the example's koboldcpp block should have every required setting");
 
@@ -175,7 +176,7 @@ public class KoboldCppClientTest {
             same(false, body.getBoolean("replace_instruct_placeholders"), "replace_instruct_placeholders");
             same(null, r.authorization, "Authorization header");
             check(body.getString("prompt").endsWith(NO_THINK), "thinking should be off by default, prompt: " + show(body.getString("prompt")));
-            same(120000, client(g).readTimeoutMs, "read timeout (timeoutSeconds 120)");
+            same(120000, client(g).readTimeoutMs(), "read timeout (timeoutSeconds 120)");
         });
 
         test("config: every setting is sent as KoboldCpp names it", g -> {
@@ -191,7 +192,7 @@ public class KoboldCppClientTest {
             same(2048, body.getInt("max_length"), "max_length");
             same(0.2, body.getDouble("temperature"), "temperature");
             check(body.getString("prompt").endsWith(THINK), "think true should open the thinking block, prompt: " + show(body.getString("prompt")));
-            same(30000, llm.readTimeoutMs, "read timeout");
+            same(30000, llm.readTimeoutMs(), "read timeout");
         });
 
         test("config: maxOutputTokens 0 and a negative temperature are left to KoboldCpp", g -> {
@@ -208,7 +209,7 @@ public class KoboldCppClientTest {
             for (int t : new int[]{0, -5}) {
                 JSONObject cfg = config(g.endpoint(), PROMPT);
                 cfg.getJSONObject("koboldcpp").put("timeoutSeconds", t);
-                same(120000, new KoboldCppClient(cfg).readTimeoutMs, "read timeout for timeoutSeconds " + t);
+                same(120000, new KoboldCppClient(cfg).readTimeoutMs(), "read timeout for timeoutSeconds " + t);
             }
         });
     }
@@ -381,7 +382,7 @@ public class KoboldCppClientTest {
         test("http: server slower than the timeout -> SocketTimeoutException with a hint", g -> {
             g.replyAfter(2000, 200, result("too late"));
             KoboldCppClient llm = client(g);
-            llm.readTimeoutMs = 300;
+            llm.setReadTimeoutMs(300);
             long start = System.nanoTime();
             Throwable e = fails(() -> llm.askNow("hi"), "askNow to a slow server");
             long tookMs = (System.nanoTime() - start) / 1000000;

@@ -1,12 +1,12 @@
 package KirizsKeve.MoveByText.nlp.rasa;
 
-import KirizsKeve.MoveByText.nlp.LlmBackend;
 import KirizsKeve.MoveByText.nlp.NluServerClient;
+import KirizsKeve.MoveByText.nlp.Settings;
 import org.json.JSONObject;
 
 /**
  * Reads the player's text with a Rasa NLU server instead of a language model: Rasa's own classifier (DIET) picks
- * the intent and marks the faction, size, places and so on, and RasaCommandBuilder turns that into the same command
+ * the intent and marks the faction, size, places and so on, and CommandBuilder turns that into the same command
  * tags the LLM providers write. The Rasa project (training data, config, start scripts) is in the nlp/rasa folder of
  * the mod. Everything but the names and hints is shared with SpacyClient, see NluServerClient.
  *
@@ -22,7 +22,7 @@ public class RasaClient extends NluServerClient {
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     public RasaClient() {
-        this(LlmBackend.loadConfig());
+        this(Settings.load());
     }
 
     /** Takes the settings directly, so tests can run outside the game. */

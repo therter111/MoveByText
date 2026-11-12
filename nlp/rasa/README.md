@@ -3,7 +3,7 @@
 A third way to read the player's text, next to Gemini and KoboldCpp, with **no language model**. `../spacy` has a
 spaCy version of the same thing, trained on the same examples. Rasa's DIET
 classifier, trained only on the examples in this folder, picks the intent (spawn a fleet, send a convoy, send help,
-or not a request) and marks the faction, size, places and so on. `RasaCommandBuilder.java` turns that into the same
+or not a request) and marks the faction, size, places and so on. `CommandBuilder.java` turns that into the same
 command tags the LLMs write, so the game and the tests treat every provider the same way.
 
 | File | What it does |
@@ -43,7 +43,7 @@ curl.exe -X POST http://127.0.0.1:5005/model/parse -d "{\"text\":\"spawn a small
 
 ## Changing what it understands
 Edit the templates or word lists in `generate_nlu.py`, run `train.bat`, restart the server. Faction nicknames and
-size words are also listed in `RasaCommandBuilder.java` (`FactionNames`, `SizeWords`), which does the final mapping;
+size words are also listed in `FactionNames.java` and `SizeWords.java`, which do the final mapping;
 add new ones in both places. The spaCy model in `../spacy` learns from the same templates, so retrain it too
 (`../spacy/train.bat`).
 
