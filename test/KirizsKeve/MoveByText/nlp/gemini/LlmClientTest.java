@@ -1,5 +1,7 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp.gemini;
 
+import KirizsKeve.MoveByText.LlmPromptTest;
+import KirizsKeve.MoveByText.nlp.LlmBackend;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -522,7 +524,7 @@ public class LlmClientTest {
 
         test("ask: a callback that throws doesn't stop later requests", g -> {
             LlmClient llm = client(g);
-            llm.ask("first", new LlmClient.Callback() {
+            llm.ask("first", new LlmBackend.Callback() {
                 @Override
                 public void onResponse(String text) {
                     throw new RuntimeException("callback blew up");
@@ -811,7 +813,7 @@ public class LlmClientTest {
     }
 
     /** Collects callbacks with the thread each one ran on. */
-    private static class Calls implements LlmClient.Callback {
+    private static class Calls implements LlmBackend.Callback {
         static class Call {
             final boolean ok;
             final String text;

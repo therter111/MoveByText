@@ -1,5 +1,7 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp.koboldcpp;
 
+import KirizsKeve.MoveByText.nlp.Http;
+import KirizsKeve.MoveByText.nlp.LlmBackend;
 import com.fs.starfarer.api.Global;
 import org.apache.log4j.Logger;
 import org.json.JSONArray;
@@ -102,11 +104,11 @@ public class KoboldCppClient implements LlmBackend {
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     public KoboldCppClient() {
-        this(LlmClient.loadConfig());
+        this(LlmBackend.loadConfig());
     }
 
     /** Takes the settings directly, so tests can run outside the game. */
-    KoboldCppClient(JSONObject cfg) {
+    public KoboldCppClient(JSONObject cfg) {
         JSONObject k = cfg.optJSONObject("koboldcpp");
         if (k == null) k = new JSONObject();
 
@@ -130,7 +132,7 @@ public class KoboldCppClient implements LlmBackend {
         if (missing.isEmpty()) {
             LOG.info("KoboldCppClient ready at " + url + (think ? " (thinking on)" : ""));
         } else {
-            LOG.warn("KoboldCppClient NOT ready. Missing in " + LlmClient.CONFIG_FILE + ":" + missing);
+            LOG.warn("KoboldCppClient NOT ready. Missing in " + CONFIG_FILE + ":" + missing);
         }
     }
 
@@ -167,9 +169,9 @@ public class KoboldCppClient implements LlmBackend {
     }
 
     @Override
-    public void ask(final String userText, final LlmClient.Callback callback) {
+    public void ask(final String userText, final Callback callback) {
         if (!isConfigured()) {
-            callback.onError("LLM not configured. Missing in " + LlmClient.CONFIG_FILE + ":" + missingSettings);
+            callback.onError("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
             return;
         }
 
@@ -199,7 +201,7 @@ public class KoboldCppClient implements LlmBackend {
     @Override
     public String askNow(String userText) throws Exception {
         if (!isConfigured()) {
-            throw new IllegalStateException("LLM not configured. Missing in " + LlmClient.CONFIG_FILE + ":" + missingSettings);
+            throw new IllegalStateException("LLM not configured. Missing in " + CONFIG_FILE + ":" + missingSettings);
         }
         return sendRequest(userText);
     }
@@ -218,7 +220,7 @@ public class KoboldCppClient implements LlmBackend {
      * Asks the server which model file it has loaded, e.g. "koboldcpp/Qwen3.5-9B-Q6_K". Blocking, so for
      * tests and tools only - never call this from the game thread.
      */
-    String loadedModel() throws Exception {
+    public String loadedModel() throws Exception {
         if (url == null) throw new IllegalStateException("koboldcpp.url is not set");
         String response = send("GET", "/api/v1/model", null);
         return new JSONObject(response).optString("result", "?");
@@ -291,7 +293,7 @@ public class KoboldCppClient implements LlmBackend {
 
                 code = conn.getResponseCode();
                 InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-                responseText = LlmClient.readFully(stream);
+                responseText = Http.readFully(stream);
             } catch (UnknownHostException e) {
                 throw (UnknownHostException) new UnknownHostException("Can't find " + url
                         + ". Is Tailscale connected on this PC, and is the name in koboldcpp.url right?").initCause(e);

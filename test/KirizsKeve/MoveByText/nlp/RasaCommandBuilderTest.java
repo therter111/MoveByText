@@ -1,4 +1,4 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -318,11 +318,11 @@ public class RasaCommandBuilderTest {
                     e("count", "two", "2"), e("size", "little", "2"), e("faction", "derelict", "2"))), "reply");
         });
 
-        test("RasaClient.sentences: split after . ! ? ; and at line breaks, numbers stay whole", () -> {
+        test("NluServerClient.sentences: split after . ! ? ; and at line breaks, numbers stay whole", () -> {
             same(java.util.Arrays.asList("Long day.", "Spawn a 150.6 point fleet!", "Really?", "Yes;", "now", "go"),
-                    RasaClient.sentences("Long day.  Spawn a 150.6 point fleet! Really? Yes; now\ngo"), "pieces");
-            same(java.util.Collections.singletonList(""), RasaClient.sentences("   "), "empty message");
-            same(RasaClient.MAX_SENTENCES, RasaClient.sentences("a. ".repeat(50)).size(), "capped");
+                    NluServerClient.sentences("Long day.  Spawn a 150.6 point fleet! Really? Yes; now\ngo"), "pieces");
+            same(java.util.Collections.singletonList(""), NluServerClient.sentences("   "), "empty message");
+            same(NluServerClient.MAX_SENTENCES, NluServerClient.sentences("a. ".repeat(50)).size(), "capped");
         });
     }
 

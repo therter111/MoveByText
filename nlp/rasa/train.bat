@@ -1,6 +1,6 @@
 @echo off
 rem Trains the MoveByText Rasa NLU model: writes the training data, drops examples identical to a test message,
-rem then runs "rasa train nlu". The model lands in rasa\models. Takes a few minutes on the CPU.
+rem then runs "rasa train nlu". The model lands in nlp\rasa\models. Takes a few minutes on the CPU.
 setlocal
 cd /d "%~dp0"
 

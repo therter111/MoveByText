@@ -32,7 +32,7 @@ import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MOD = os.path.dirname(HERE)
+MOD = os.path.dirname(os.path.dirname(HERE))  # the mod folder: this script is in nlp/rasa
 PORT = 5006
 EXE = ".exe" if os.name == "nt" else ""
 CORE = os.path.normpath(os.path.join(MOD, "..", "..", "starsector-core"))

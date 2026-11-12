@@ -14,7 +14,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NLU = os.path.join(HERE, "data", "nlu.yml")
-TESTS = os.path.join(HERE, "..", "test", "KirizsKeve", "MoveByText", "LlmPrompt*.java")
+TESTS = os.path.join(HERE, "..", "..", "test", "KirizsKeve", "MoveByText", "LlmPrompt*.java")
 LABEL = re.compile(r"\[([^\]]+)\](?:\([^)]*\)|\{[^}]*\})")
 
 

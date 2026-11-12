@@ -1,4 +1,4 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * Reads a number the way players write it: "120", "1,000", "150.6", "-50", "ninety-five", "two hundred",
  * "a hundred and twenty-five". Used by RasaCommandBuilder, which gets the numbers as plain text from Rasa.
  */
-final class NumberWords {
+public final class NumberWords {
 
     private static final Pattern DIGITS = Pattern.compile("-?\\d[\\d,]*(\\.\\d+)?");
     private static final Map<String, Integer> SMALL = new HashMap<String, Integer>();
@@ -27,7 +27,7 @@ final class NumberWords {
     }
 
     /** The first number in the text, or null when it has none. Digits win over words. */
-    static Double parse(String text) {
+    public static Double parse(String text) {
         if (text == null) return null;
         String t = text.toLowerCase();
 

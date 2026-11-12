@@ -34,8 +34,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MOD = os.path.dirname(HERE)
-DATA = os.path.join(MOD, "rasa", "data")
+NLP = os.path.dirname(HERE)  # the nlp folder, which also holds rasa/
+DATA = os.path.join(NLP, "rasa", "data")
 RESULTS = os.path.join(HERE, "results")
 ENV = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
 TITLE = "spaCy NLU cross-validation"
@@ -43,7 +43,7 @@ TITLE = "spaCy NLU cross-validation"
 
 def load_rasa_script(name):
     """A script from the rasa folder as a module. Loaded by path: this script has the same name as the Rasa one."""
-    spec = importlib.util.spec_from_file_location("rasa_" + name, os.path.join(MOD, "rasa", name + ".py"))
+    spec = importlib.util.spec_from_file_location("rasa_" + name, os.path.join(NLP, "rasa", name + ".py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

@@ -1,5 +1,9 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp.spacy;
 
+import KirizsKeve.MoveByText.nlp.LlmBackend;
+import KirizsKeve.MoveByText.nlp.NluServerClient;
+import KirizsKeve.MoveByText.nlp.NumberWords;
+import KirizsKeve.MoveByText.nlp.RasaCommandBuilder;
 import com.fs.starfarer.api.Global;
 import org.apache.log4j.Logger;
 import org.json.JSONArray;
@@ -14,13 +18,13 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Reads the player's text with the spaCy NLU server in the spacy folder of the mod: a spaCy text classifier picks
+ * Reads the player's text with the spaCy NLU server in the nlp/spacy folder of the mod: a spaCy text classifier picks
  * the intent and a spaCy entity recognizer marks the faction, size, places and so on. It is trained on the same
  * generated examples as the Rasa model, but starts from pretrained English word vectors. The server answers in
  * Rasa's /model/parse format, so everything else is shared with RasaClient, see NluServerClient.
  *
  * Rules fix the spaCy model's common mistakes without retraining it. These run here, because they need the mod's
- * word lists; the server has more (spacy/rules.py). Each has a name, see spacy/README.md for what each one adds:
+ * word lists; the server has more (nlp/spacy/rules.py). Each has a name; nlp/spacy/README.md says what each one adds:
  *   cancel   a sentence only counts as "cancel" when it says so (the model read stories as "never mind")
  *   faction  in a short command with no faction marked, the faction is looked up in the text; ordinary words
  *            marked as a faction ("a nearby faction should help Jangala") are dropped
@@ -32,7 +36,7 @@ import java.util.regex.Pattern;
  *   count    a count above MAX_COUNT is a misread size: "SPAWN PIRATES 200" is one 200-point fleet
  *
  * Settings: a "spacy" object in data/config/llmdata.json, every field optional:
- *   url             default "http://127.0.0.1:5007", where spacy/start-server.bat listens
+ *   url             default "http://127.0.0.1:5007", where nlp/spacy/start-server.bat listens
  *   minConfidence   intents spaCy is less sure about than this count as "not a request", default 0.5
  *   timeoutSeconds  default 30
  *   rules           which rules run: a list of names, "all" or "none"; default DEFAULT_RULES
@@ -43,9 +47,9 @@ public class SpacyClient extends NluServerClient {
 
     static final String DEFAULT_URL = "http://127.0.0.1:5007";
 
-    static final List<String> ALL_RULES = Collections.unmodifiableList(Arrays.asList(
+    public static final List<String> ALL_RULES = Collections.unmodifiableList(Arrays.asList(
             "cancel", "faction", "split", "places", "roles", "size", "count"));
-    static final List<String> DEFAULT_RULES = ALL_RULES;
+    public static final List<String> DEFAULT_RULES = ALL_RULES;
 
     /** Words a real "cancel" sentence has: "never mind", "forget it", "don't send them", "no fleets after all". */
     static final Pattern CANCEL_WORDS = Pattern.compile("(?i)\\b(never ?mind|nevermind|cancel\\w*|forget|scratch"
@@ -70,11 +74,11 @@ public class SpacyClient extends NluServerClient {
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     public SpacyClient() {
-        this(LlmClient.loadConfig());
+        this(LlmBackend.loadConfig());
     }
 
     /** Takes the settings directly, so tests can run outside the game. */
-    SpacyClient(JSONObject cfg) {
+    public SpacyClient(JSONObject cfg) {
         super(cfg, "spacy", "spaCy", "spaCy NLU", DEFAULT_URL);
         JSONObject block = cfg.optJSONObject("spacy");
         this.rules = readRules(block == null ? null : block.opt("rules"));
@@ -82,7 +86,7 @@ public class SpacyClient extends NluServerClient {
     }
 
     /** A JSON list of names, "all", "none" or "a,b"; anything missing or unreadable gives DEFAULT_RULES. */
-    static Set<String> readRules(Object value) {
+    public static Set<String> readRules(Object value) {
         List<String> names = new ArrayList<String>();
         if (value instanceof JSONArray) {
             JSONArray list = (JSONArray) value;
@@ -107,7 +111,7 @@ public class SpacyClient extends NluServerClient {
 
     /** split: each sentence, cut again before a second command ("spawn X and send Y"). */
     @Override
-    List<String> pieces(String text) {
+    protected List<String> pieces(String text) {
         List<String> sentences = super.pieces(text);
         if (!rules.contains("split")) return sentences;
         List<String> out = new ArrayList<String>();
@@ -121,7 +125,7 @@ public class SpacyClient extends NluServerClient {
     }
 
     @Override
-    JSONObject adjust(JSONObject parse) throws Exception {
+    protected JSONObject adjust(JSONObject parse) throws Exception {
         String text = parse.optString("text", "");
         JSONObject intent = parse.optJSONObject("intent");
         String name = intent == null ? "" : intent.optString("name", "");

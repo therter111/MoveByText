@@ -45,7 +45,7 @@ curl.exe -X POST http://127.0.0.1:5005/model/parse -d "{\"text\":\"spawn a small
 Edit the templates or word lists in `generate_nlu.py`, run `train.bat`, restart the server. Faction nicknames and
 size words are also listed in `RasaCommandBuilder.java` (`FactionNames`, `SizeWords`), which does the final mapping;
 add new ones in both places. The spaCy model in `../spacy` learns from the same templates, so retrain it too
-(`spacy/train.bat`).
+(`../spacy/train.bat`).
 
 To see how well a model does, run `LlmPromptTest` with the provider set to `rasa`. It writes
 `test/logs/llm-prompt-test_rasa_<date>.log`, the same report the LLMs get.

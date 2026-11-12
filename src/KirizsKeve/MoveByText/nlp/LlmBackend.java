@@ -1,5 +1,9 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp;
 
+import KirizsKeve.MoveByText.nlp.gemini.LlmClient;
+import KirizsKeve.MoveByText.nlp.koboldcpp.KoboldCppClient;
+import KirizsKeve.MoveByText.nlp.rasa.RasaClient;
+import KirizsKeve.MoveByText.nlp.spacy.SpacyClient;
 import com.fs.starfarer.api.Global;
 import org.json.JSONObject;
 
@@ -16,11 +20,22 @@ import org.json.JSONObject;
  */
 public interface LlmBackend {
 
+    /** Every setting is read from this file (relative to the mod folder). */
+    String CONFIG_FILE = "data/config/llmdata.json";
+
+    interface Callback {
+        /** Called on a background thread when the model answered. */
+        void onResponse(String text);
+
+        /** Called on a background thread when anything went wrong. */
+        void onError(String message);
+    }
+
     /** False when required settings are missing; ask() then reports which ones instead of sending anything. */
     boolean isConfigured();
 
     /** Sends one user message. Returns immediately; the answer arrives through the callback on a background thread. */
-    void ask(String userText, LlmClient.Callback callback);
+    void ask(String userText, Callback callback);
 
     /** Blocking request without history. For tests only - never call this from the game thread. */
     String askNow(String userText) throws Exception;
@@ -33,7 +48,17 @@ public interface LlmBackend {
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     static LlmBackend create() {
-        return fromConfig(LlmClient.loadConfig());
+        return fromConfig(loadConfig());
+    }
+
+    /** The settings file, or an empty object when it can't be read. Call on the game thread. */
+    static JSONObject loadConfig() {
+        try {
+            return Global.getSettings().loadJSON(CONFIG_FILE);
+        } catch (Exception e) {
+            Global.getLogger(LlmBackend.class).warn("Could not read " + CONFIG_FILE + ": " + e.getMessage());
+            return new JSONObject();
+        }
     }
 
     /** Takes the settings directly, so tests can run outside the game. */
@@ -50,7 +75,7 @@ public interface LlmBackend {
         }
         if (!provider.equals("gemini")) {
             Global.getLogger(LlmBackend.class).warn("Unknown provider \"" + provider + "\" in "
-                    + LlmClient.CONFIG_FILE + ", using Gemini. Use \"koboldcpp\", \"rasa\", \"spacy\" or \"gemini\".");
+                    + CONFIG_FILE + ", using Gemini. Use \"koboldcpp\", \"rasa\", \"spacy\" or \"gemini\".");
         }
         return new LlmClient(cfg);
     }

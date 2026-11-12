@@ -1,4 +1,4 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -26,21 +26,21 @@ import java.util.Set;
  *
  * The spaCy server (SpacyClient) answers in the same format, so this serves both.
  */
-final class RasaCommandBuilder {
+public final class RasaCommandBuilder {
 
     static final String NONE = "<NONE>";
 
-    static final String SPAWN_INTENT = "spawn_fleet";
-    static final String TRADE_INTENT = "trade_convoy";
-    static final String HELP_INTENT = "request_help";
+    public static final String SPAWN_INTENT = "spawn_fleet";
+    public static final String TRADE_INTENT = "trade_convoy";
+    public static final String HELP_INTENT = "request_help";
     /** "never mind", "cancel that": drops every request in the sentences before it. */
-    static final String CANCEL_INTENT = "cancel";
+    public static final String CANCEL_INTENT = "cancel";
 
     static final int MIN_POINTS = 1;
     static final int MAX_POINTS = 300;
     static final int DEFAULT_POINTS = 100;
     /** More copies of one fleet than this is almost certainly a misread number. */
-    static final int MAX_COUNT = 10;
+    public static final int MAX_COUNT = 10;
 
     private static final List<String> ENTITY_TYPES = Arrays.asList(
             "faction", "size", "points", "destination", "origin", "target", "multiplier", "offset", "reference", "count");
@@ -339,7 +339,7 @@ final class RasaCommandBuilder {
     }
 
     /** True for a vanilla Starsector system or market ("Jangala", "the Askonia system"). */
-    static boolean isKnownPlace(String name) {
+    public static boolean isKnownPlace(String name) {
         String p = place(name);
         return p != null && KNOWN_PLACES.contains(p.toLowerCase());
     }
@@ -358,7 +358,7 @@ final class RasaCommandBuilder {
     // ------------------------------------------------------------------------------------------
 
     /** Faction names, nicknames, leaders, units and home worlds -> one of the 11 faction ids the game knows. */
-    static final class FactionNames {
+    public static final class FactionNames {
         private static final Map<String, String> ALIASES = new LinkedHashMap<String, String>();
         /** Longest aliases first, so "luddic church" wins over "luddic" and "remnant drones" over "drones". */
         private static final List<String> BY_LENGTH;
@@ -401,7 +401,7 @@ final class RasaCommandBuilder {
         }
 
         /** The faction id for a name, or null when it isn't a faction of the game. */
-        static String resolve(String name) {
+        public static String resolve(String name) {
             String n = normalize(name);
             if (n.isEmpty()) return null;
             String exact = ALIASES.get(n);
@@ -455,7 +455,7 @@ final class RasaCommandBuilder {
     // ------------------------------------------------------------------------------------------
 
     /** The size words of the system prompt, plus the words for size math. */
-    static final class SizeWords {
+    public static final class SizeWords {
         private static final Map<String, Integer> TIERS = new LinkedHashMap<String, Integer>();
         private static final List<String> BY_LENGTH;
 
@@ -486,7 +486,7 @@ final class RasaCommandBuilder {
         }
 
         /** 15, 40, 100, 150, 225 or 300 for a size word, or null. */
-        static Integer tier(String text) {
+        public static Integer tier(String text) {
             String n = " " + FactionNames.normalize(text) + " ";
             for (String word : BY_LENGTH) {
                 if (n.contains(" " + word + " ")) return TIERS.get(word);

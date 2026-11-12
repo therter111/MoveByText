@@ -1,4 +1,4 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp;
 
 import com.fs.starfarer.api.Global;
 import org.apache.log4j.Logger;
@@ -23,8 +23,8 @@ import java.util.concurrent.ThreadFactory;
  * Reads the player's text with a local NLU server instead of a language model: the server picks the intent and
  * marks the faction, size, places and so on, and RasaCommandBuilder turns that into the same command tags the LLM
  * providers write. Both servers answer POST /model/parse in Rasa's format:
- * - RasaClient talks to a Rasa server (rasa folder of the mod);
- * - SpacyClient talks to the spaCy server in the spacy folder, which copies Rasa's format.
+ * - RasaClient talks to a Rasa server (nlp/rasa folder of the mod);
+ * - SpacyClient talks to the spaCy server in the nlp/spacy folder, which copies Rasa's format.
  *
  * Works the same way as the other providers: one background worker thread, the Callback runs on it, and nothing
  * here touches Starsector objects. There is no conversation history; every message is read on its own.
@@ -35,7 +35,7 @@ import java.util.concurrent.ThreadFactory;
  *   minConfidence   intents the server is less sure about than this count as "not a request", default 0.5
  *   timeoutSeconds  default 30
  */
-abstract class NluServerClient implements LlmBackend {
+public abstract class NluServerClient implements LlmBackend {
 
     private static final double DEFAULT_MIN_CONFIDENCE = 0.5;
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
@@ -43,24 +43,24 @@ abstract class NluServerClient implements LlmBackend {
 
     private final Logger log = Global.getLogger(getClass());
 
-    /** The settings block in llmdata.json, and the mod folder with the server's scripts: "rasa" or "spacy". */
+    /** The settings block in llmdata.json, and the folder in nlp/ with the server's scripts: "rasa" or "spacy". */
     private final String folder;
     /** "Rasa" or "spaCy", for messages. */
     private final String serverName;
     private final String modelName;
 
     /** Server address without a trailing slash. */
-    final String url;
+    protected final String url;
     /** null = no token. */
     private final String token;
     private final double minConfidence;
     /** How long to wait for the answer. Read from timeoutSeconds; tests may change it. */
-    int readTimeoutMs;
+    protected int readTimeoutMs;
 
     private final ExecutorService worker;
 
     /** Takes the settings directly, so tests can run outside the game. */
-    NluServerClient(JSONObject cfg, String folder, String serverName, String modelName, String defaultUrl) {
+    protected NluServerClient(JSONObject cfg, String folder, String serverName, String modelName, String defaultUrl) {
         this.folder = folder;
         this.serverName = serverName;
         this.modelName = modelName;
@@ -92,17 +92,17 @@ abstract class NluServerClient implements LlmBackend {
     }
 
     /** The pieces of the message sent to the server one by one: its sentences by default. */
-    List<String> pieces(String text) {
+    protected List<String> pieces(String text) {
         return sentences(text);
     }
 
     /** Fixes to one sentence's parse before RasaCommandBuilder reads it; none by default. SpacyClient has some. */
-    JSONObject adjust(JSONObject parse) throws Exception {
+    protected JSONObject adjust(JSONObject parse) throws Exception {
         return parse;
     }
 
     /** Extra text for an HTTP error code, e.g. what to do about a 401; empty when there is nothing to add. */
-    String httpHint(int code) {
+    protected String httpHint(int code) {
         return "";
     }
 
@@ -138,7 +138,7 @@ abstract class NluServerClient implements LlmBackend {
     }
 
     @Override
-    public void ask(final String userText, final LlmClient.Callback callback) {
+    public void ask(final String userText, final Callback callback) {
         worker.submit(new Runnable() {
             @Override
             public void run() {
@@ -179,13 +179,13 @@ abstract class NluServerClient implements LlmBackend {
     }
 
     /** At most this many sentences are read; the rest of a very long message is ignored. */
-    static final int MAX_SENTENCES = 20;
+    protected static final int MAX_SENTENCES = 20;
 
     /**
      * Splits after . ! ? ; followed by a space, and at line breaks. "150.6" and "Kanta's" stay whole. Always at
      * least one piece, so an empty message still gets an answer.
      */
-    static List<String> sentences(String text) {
+    protected static List<String> sentences(String text) {
         List<String> out = new ArrayList<String>();
         for (String piece : String.valueOf(text).split("(?<=[.!?;])\\s+|[\\r\\n]+")) {
             String s = piece.trim();
@@ -201,14 +201,14 @@ abstract class NluServerClient implements LlmBackend {
     }
 
     /** The model the server has loaded, from GET /status, e.g. "rasa/nlu-....tar.gz". Blocking; for tests and tools. */
-    String loadedModel() throws Exception {
+    public String loadedModel() throws Exception {
         String file = new JSONObject(send("GET", "/status", null)).optString("model_file", "?");
         int slash = Math.max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
         return folder + "/" + (slash >= 0 ? file.substring(slash + 1) : file);
     }
 
     /** "spawn_fleet 0.97: faction=pirate size=small" for the log. */
-    static String describe(JSONObject parse) {
+    protected static String describe(JSONObject parse) {
         JSONObject intent = parse.optJSONObject("intent");
         StringBuilder sb = new StringBuilder();
         sb.append(intent == null ? "?" : intent.optString("name", "?"));
@@ -250,14 +250,14 @@ abstract class NluServerClient implements LlmBackend {
                 }
                 code = conn.getResponseCode();
                 InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-                responseText = LlmClient.readFully(stream);
+                responseText = Http.readFully(stream);
             } catch (UnknownHostException e) {
                 throw (UnknownHostException) new UnknownHostException("Can't find " + url
-                        + ". Check " + folder + ".url in " + LlmClient.CONFIG_FILE + ".").initCause(e);
+                        + ". Check " + folder + ".url in " + CONFIG_FILE + ".").initCause(e);
             } catch (ConnectException e) {
                 throw (ConnectException) new ConnectException("Can't connect to " + serverName + " at " + url
-                        + ". Is the " + serverName + " server running? Start " + folder + "/start-server.bat and wait"
-                        + " until it says the server is up and running.").initCause(e);
+                        + ". Is the " + serverName + " server running? Start nlp/" + folder + "/start-server.bat"
+                        + " and wait until it says the server is up and running.").initCause(e);
             } catch (SocketTimeoutException e) {
                 String what = String.valueOf(e.getMessage()).toLowerCase().contains("connect")
                         ? "Timed out connecting to " + serverName + " at " + url + "."

@@ -1,6 +1,6 @@
 @echo off
 rem Trains the MoveByText spaCy NLU model: writes the training data with the Rasa templates, drops examples
-rem identical to a test message, then runs train.py. The model lands in spacy\models. Takes a few minutes on the CPU.
+rem identical to a test message, then runs train.py. The model lands in nlp\spacy\models. Takes a few minutes on the CPU.
 setlocal
 cd /d "%~dp0"
 

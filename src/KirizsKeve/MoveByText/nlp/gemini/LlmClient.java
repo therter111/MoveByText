@@ -1,5 +1,7 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp.gemini;
 
+import KirizsKeve.MoveByText.nlp.Http;
+import KirizsKeve.MoveByText.nlp.LlmBackend;
 import com.fs.starfarer.api.Global;
 import org.apache.log4j.Logger;
 import org.json.JSONArray;
@@ -10,7 +12,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,18 +34,8 @@ import java.util.concurrent.ThreadFactory;
  */
 public class LlmClient implements LlmBackend {
 
-    public interface Callback {
-        /** Called on a background thread when the model answered. */
-        void onResponse(String text);
-
-        /** Called on a background thread when anything went wrong. */
-        void onError(String message);
-    }
-
     private static final Logger LOG = Global.getLogger(LlmClient.class);
 
-    /** Every setting is read from this file (relative to the mod folder). */
-    static final String CONFIG_FILE = "data/config/llmdata.json";
     private static final String ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
     private static final String KEY_PLACEHOLDER_PREFIX = "PASTE_";
 
@@ -61,7 +52,7 @@ public class LlmClient implements LlmBackend {
     /** Names of required settings missing from the file, or "" when everything is there. */
     private final String missingSettings;
     /** How long to wait for Gemini's answer. The game keeps the default; tests may change it. */
-    int readTimeoutMs = 60000;
+    public int readTimeoutMs = 60000;
 
     /** Entries are {role, text}. Only ever touched from the worker thread. */
     private final List<String[]> history = new ArrayList<String[]>();
@@ -78,11 +69,11 @@ public class LlmClient implements LlmBackend {
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
     public LlmClient() {
-        this(loadConfig());
+        this(LlmBackend.loadConfig());
     }
 
     /** Takes the settings directly, so tests can run outside the game (no Global.getSettings()). */
-    LlmClient(JSONObject cfg) {
+    public LlmClient(JSONObject cfg) {
         this(cfg, ENDPOINT_BASE);
     }
 
@@ -114,15 +105,6 @@ public class LlmClient implements LlmBackend {
             LOG.info("LlmClient ready, model = " + this.model);
         } else {
             LOG.warn("LlmClient NOT ready. Missing in " + CONFIG_FILE + ":" + missing);
-        }
-    }
-
-    static JSONObject loadConfig() {
-        try {
-            return Global.getSettings().loadJSON(CONFIG_FILE);
-        } catch (Exception e) {
-            LOG.warn("Could not read " + CONFIG_FILE + ": " + e.getMessage());
-            return new JSONObject();
         }
     }
 
@@ -250,7 +232,7 @@ public class LlmClient implements LlmBackend {
 
             int code = conn.getResponseCode();
             InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-            String responseText = readFully(stream);
+            String responseText = Http.readFully(stream);
 
             if (code != 200) {
                 throw new RuntimeException("Gemini API returned HTTP " + code + ": " + responseText);
@@ -297,26 +279,5 @@ public class LlmClient implements LlmBackend {
                     + "). If it says MAX_TOKENS, raise maxOutputTokens in the settings file.");
         }
         return text;
-    }
-
-    /** Also used by KoboldCppClient. */
-    static String readFully(InputStream in) throws Exception {
-        if (in == null) return "";
-        try {
-            // Starsector's script sandbox blocks most java.io classes (e.g. ByteArrayOutputStream),
-            // so grow a plain byte[] by hand instead.
-            byte[] data = new byte[8192];
-            int len = 0;
-            int n;
-            while ((n = in.read(data, len, data.length - len)) != -1) {
-                len += n;
-                if (len == data.length) {
-                    data = Arrays.copyOf(data, data.length * 2);
-                }
-            }
-            return new String(data, 0, len, "UTF-8");
-        } finally {
-            in.close();
-        }
     }
 }

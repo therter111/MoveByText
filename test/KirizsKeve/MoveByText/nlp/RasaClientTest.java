@@ -1,5 +1,8 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp;
 
+import KirizsKeve.MoveByText.LlmPromptTest;
+import KirizsKeve.MoveByText.nlp.rasa.RasaClient;
+import KirizsKeve.MoveByText.nlp.spacy.SpacyClient;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.log4j.BasicConfigurator;
@@ -125,7 +128,7 @@ public class RasaClientTest {
             g.reply(401, "{\"message\":\"User is not authenticated.\"}");
             has(fails(() -> llm.askNow("hi"), "401").getMessage(), "rasa.token", "401 message");
             g.reply(409, "{\"message\":\"No model loaded\"}");
-            has(fails(() -> llm.askNow("hi"), "409").getMessage(), "rasa/train.bat", "409 message");
+            has(fails(() -> llm.askNow("hi"), "409").getMessage(), "nlp/rasa/train.bat", "409 message");
             g.reply(500, "{}");
             same("Rasa returned HTTP 500: {}", fails(() -> llm.askNow("hi"), "500").getMessage(), "500 message");
         });
@@ -133,7 +136,7 @@ public class RasaClientTest {
         test("http: nothing listening -> ConnectException telling to start the server", g -> {
             Throwable e = fails(() -> client(g, closedEndpoint(), null).askNow("hi"), "closed port");
             check(e instanceof ConnectException, "expected ConnectException, got " + e);
-            has(e.getMessage(), "rasa/start-server.bat", "message");
+            has(e.getMessage(), "nlp/rasa/start-server.bat", "message");
         });
 
         test("http: slower than the timeout -> SocketTimeoutException", g -> {
@@ -172,7 +175,7 @@ public class RasaClientTest {
 
         test("describe: a readable summary for the game log", g -> {
             JSONObject p = new JSONObject(parse("spawn_fleet", 0.97, ent("faction", "pirate"), ent("size", "small", "2")));
-            same("spawn_fleet 0.97: faction=pirate size=small#2", RasaClient.describe(p), "summary");
+            same("spawn_fleet 0.97: faction=pirate size=small#2", NluServerClient.describe(p), "summary");
         });
 
         // spaCy: the same client with its own settings block, address and names
@@ -202,10 +205,10 @@ public class RasaClientTest {
             same("/model/parse", g.only().uri.getPath(), "path");
         });
 
-        test("spacy: errors name spaCy and spacy/start-server.bat", g -> {
+        test("spacy: errors name spaCy and nlp/spacy/start-server.bat", g -> {
             Throwable e = fails(() -> spacyClient(closedEndpoint()).askNow("hi"), "closed port");
             check(e instanceof ConnectException, "expected ConnectException, got " + e);
-            has(e.getMessage(), "spacy/start-server.bat", "message");
+            has(e.getMessage(), "nlp/spacy/start-server.bat", "message");
             has(e.getMessage(), "Can't connect to spaCy", "message");
             g.reply(500, "{}");
             same("spaCy returned HTTP 500: {}", fails(() -> spacyClient(g.endpoint()).askNow("hi"), "500").getMessage(),
@@ -424,7 +427,7 @@ public class RasaClientTest {
         }
     }
 
-    private static class Calls implements LlmClient.Callback {
+    private static class Calls implements LlmBackend.Callback {
         static class Call {
             final boolean ok;
             final String text;

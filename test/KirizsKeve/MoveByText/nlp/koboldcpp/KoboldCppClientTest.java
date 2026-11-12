@@ -1,5 +1,8 @@
-package KirizsKeve.MoveByText;
+package KirizsKeve.MoveByText.nlp.koboldcpp;
 
+import KirizsKeve.MoveByText.LlmPromptTest;
+import KirizsKeve.MoveByText.nlp.LlmBackend;
+import KirizsKeve.MoveByText.nlp.gemini.LlmClient;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.log4j.BasicConfigurator;
@@ -656,7 +659,7 @@ public class KoboldCppClientTest {
         }
     }
 
-    private static class Calls implements LlmClient.Callback {
+    private static class Calls implements LlmBackend.Callback {
         static class Call {
             final boolean ok;
             final String text;

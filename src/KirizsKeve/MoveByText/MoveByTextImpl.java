@@ -1,5 +1,6 @@
 package KirizsKeve.MoveByText;
 
+import KirizsKeve.MoveByText.nlp.LlmBackend;
 import com.fs.starfarer.api.BaseModPlugin;
 import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.campaign.LocationAPI;
@@ -59,7 +60,7 @@ public class MoveByTextImpl extends BaseModPlugin {
         if (llm == null || text == null || text.trim().isEmpty()) return;
 
         log.info("LLM: sending message to " + llm.modelName() + "...");
-        llm.ask(text, new LlmClient.Callback() {
+        llm.ask(text, new LlmBackend.Callback() {
             @Override
             public void onResponse(String reply) {
                 writeLlmReplyToTerminal(reply);

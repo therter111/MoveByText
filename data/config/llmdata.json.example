@@ -2,12 +2,12 @@
   # Copy this file to: <your mod folder>/data/config/llmdata.json
 
   # Which model answers: "koboldcpp" (your own KoboldCpp server, e.g. Qwen on another PC), "rasa" (a Rasa NLU
-  # server on this PC, no language model, see rasa/README.md), "spacy" (a spaCy NLU server on this PC, trained on
-  # the same examples, see spacy/README.md) or "gemini" (Google's API).
+  # server on this PC, no language model, see nlp/rasa/README.md), "spacy" (a spaCy NLU server on this PC, trained on
+  # the same examples, see nlp/spacy/README.md) or "gemini" (Google's API).
   "provider": "koboldcpp",
 
   # ---- KoboldCpp (used when provider is "koboldcpp") ----
-  # The model and its context size are picked when KoboldCpp is started, not here. Setup: koboldcpp/README.md.
+  # The model and its context size are picked when KoboldCpp is started, not here. Setup: nlp/koboldcpp/README.md.
   # The prompt is built in ChatML, the format Qwen models use.
   "koboldcpp": {
     # The other PC's Tailscale name (or its 100.x.y.z address) and KoboldCpp's port.
@@ -25,7 +25,7 @@
   # ---- Rasa (used when provider is "rasa") ----
   # Reads the text with intent classification and entity extraction instead of an LLM. Every field is optional.
   "rasa": {
-    # Where rasa/start-server.bat listens.
+    # Where nlp/rasa/start-server.bat listens.
     "url": "http://127.0.0.1:5005",
     # Only if the server was started with --auth-token.
     "token": "",
@@ -37,13 +37,13 @@
   # ---- spaCy (used when provider is "spacy") ----
   # Same idea as Rasa, with spaCy and pretrained word vectors. Every field is optional.
   "spacy": {
-    # Where spacy/start-server.bat listens.
+    # Where nlp/spacy/start-server.bat listens.
     "url": "http://127.0.0.1:5007",
     # Messages spaCy is less sure about than this count as not a request.
     "minConfidence": 0.5,
     "timeoutSeconds": 30
     # Optional: which of the mod's fixes for spaCy's mistakes run, e.g. "rules": ["cancel", "faction"], or "all"
-    # or "none". Without it the default set runs; spacy/README.md explains each one.
+    # or "none". Without it the default set runs; nlp/spacy/README.md explains each one.
   },
 
   # ---- Gemini (used when provider is "gemini") ----

@@ -1,5 +1,11 @@
 package KirizsKeve.MoveByText;
 
+import KirizsKeve.MoveByText.nlp.LlmBackend;
+import KirizsKeve.MoveByText.nlp.NluServerClient;
+import KirizsKeve.MoveByText.nlp.gemini.LlmClient;
+import KirizsKeve.MoveByText.nlp.koboldcpp.KoboldCppClient;
+import KirizsKeve.MoveByText.nlp.rasa.RasaClient;
+import KirizsKeve.MoveByText.nlp.spacy.SpacyClient;
 import org.json.JSONObject;
 
 import java.net.SocketTimeoutException;
@@ -427,7 +433,7 @@ public class LlmPromptTest {
     }
 
     /** llmdata.json has '#' comment lines, which plain org.json may not accept, so drop them first. */
-    static JSONObject readConfig(Path path) throws Exception {
+    public static JSONObject readConfig(Path path) throws Exception {
         StringBuilder sb = new StringBuilder();
         for (String line : Files.readAllLines(path, StandardCharsets.UTF_8)) {
             if (!line.trim().startsWith("#")) sb.append(line).append('\n');

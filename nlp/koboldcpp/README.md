@@ -38,7 +38,7 @@ prompt. KoboldCpp and the model file are not in this repo; download them on the 
 
 ## How well it does
 On `LlmPromptTest` (October 2026) it passed 300 of the first 329 cases (91%) and 265 of the 300 long ones (88%).
-Rasa, the no-LLM provider, passes about 42% overall (see `rasa/README.md`).
+Rasa, the no-LLM provider, passes about 42% overall (see `../rasa/README.md`).
 
 ## Limits
 - The prompt is built in ChatML, the format Qwen models use. Thinking is switched off with an empty `<think>` block.

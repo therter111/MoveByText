@@ -32,14 +32,14 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MOD = os.path.dirname(HERE)
+NLP = os.path.dirname(HERE)  # the nlp folder, which also holds rasa/
 PORT = 5008
 
 
 def load_rasa_script(name):
     """A script from the rasa folder as a module. Loaded by path: this script has the same name as the Rasa one."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("rasa_" + name, os.path.join(MOD, "rasa", name + ".py"))
+    spec = importlib.util.spec_from_file_location("rasa_" + name, os.path.join(NLP, "rasa", name + ".py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

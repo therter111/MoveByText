@@ -3,7 +3,7 @@
 The spaCy version of the Rasa parser in `../rasa`: a fourth way to read the player's text, with **no language
 model**. A spaCy text classifier picks the intent (spawn a fleet, send a convoy, send help, cancel, or not a
 request) and a spaCy entity recognizer marks the faction, size, places and so on. Both learn from **the same
-examples as the Rasa model** (`rasa/generate_nlu.py`), but start from pretrained English word vectors
+examples as the Rasa model** (`../rasa/generate_nlu.py`), but start from pretrained English word vectors
 (`en_core_web_md`), so words and phrasings the templates never use are less foreign to them.
 
 `server.py` answers in Rasa's `/model/parse` format, so the mod reads it like Rasa: `SpacyClient.java` sends the
@@ -13,7 +13,7 @@ rules fix the model's common mistakes without retraining it (see "The rules" bel
 
 | File | What it does |
 |---|---|
-| `nlu_data.py` | Reads the Rasa training data (`rasa/data/nlu.yml`) into plain text, intent and labelled spans. |
+| `nlu_data.py` | Reads the Rasa training data (`../rasa/data/nlu.yml`) into plain text, intent and labelled spans. |
 | `config.cfg` | The spaCy pipeline: word vectors, a shared CNN, text classifier, entity recognizer. |
 | `train.py`, `train.bat` | Generates the data with the Rasa scripts, removes test overlaps, trains a model into `models/`. |
 | `server.py`, `start-server.bat` | Starts the server on `127.0.0.1:5007` (this PC only). |
@@ -50,7 +50,7 @@ curl.exe -X POST http://127.0.0.1:5007/model/parse -d "{\"text\":\"spawn a small
 This shows the answer after the server's rules; the rules in `SpacyClient.java` are applied after it, in the game.
 
 ## Changing what it understands
-The templates are shared with Rasa: edit `rasa/generate_nlu.py`, then run `train.bat` here (and `rasa/train.bat`
+The templates are shared with Rasa: edit `../rasa/generate_nlu.py`, then run `train.bat` here (and `../rasa/train.bat`
 for the Rasa model) and restart the server. Faction nicknames and size words are also listed in
 `RasaCommandBuilder.java` (`FactionNames`, `SizeWords`), which does the final mapping for both.
 
@@ -61,7 +61,7 @@ To see how well a model does, run `LlmPromptTest` with the provider set to `spac
 `test/logs/llm-prompt-test_spacy_<date>.log`, the same report the other providers get.
 
 To see how well the pipeline learns the training data itself, run `cross-validate.bat`. It uses the same code and
-seed as `rasa/cross_validate.py`, so a run made from the same data has exactly the same 10 parts as a Rasa run, and
+seed as `../rasa/cross_validate.py`, so a run made from the same data has exactly the same 10 parts as a Rasa run, and
 the two can be compared part by part. It takes about 2 hours. Each run gets a folder `results/cv-<date>-<time>/`
 (about 600 MB: each part's model is 60 MB, mostly the word vectors) with `full.log`, `summary.md` and a `part-01` to
 `part-10` folder each holding that part's data, model, reports and log. A stopped run continues with
@@ -150,4 +150,4 @@ Choices behind `config.cfg`, tried side by side on the same data:
 - It reads each message on its own, with no memory of earlier messages.
 - It learns only what the templates show. The word vectors help with new words that mean the same thing, not with
   new kinds of requests or complicated size math.
-- Rasa's lookup tables (`rasa/data/lookups.yml`) are not used.
+- Rasa's lookup tables (`../rasa/data/lookups.yml`) are not used.

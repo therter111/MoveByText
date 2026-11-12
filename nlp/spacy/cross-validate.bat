@@ -1,6 +1,6 @@
 @echo off
 rem Cross-validates the spaCy NLU model: splits the training data into 10 parts, then for each part trains a model
-rem on the other 9 and tests it on that one, each in its own process. Results land in spacy\results\cv-<date>-<time>.
+rem on the other 9 and tests it on that one, each in its own process. Results land in nlp\spacy\results\cv-<date>-<time>.
 rem Options: --folds N (default 10), --resume results\cv-... (continue a stopped run).
 setlocal
 cd /d "%~dp0"
