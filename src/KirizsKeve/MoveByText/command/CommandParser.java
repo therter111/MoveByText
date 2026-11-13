@@ -2,6 +2,7 @@ package KirizsKeve.MoveByText.command;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 
 /**
@@ -10,19 +11,20 @@ import java.util.regex.Matcher;
  */
 public final class CommandParser {
 
-    /** Every command in the text: the SPAWN tags first, then TRADE, then HELP, each in the order written. */
+    /** Every command in the text, in the order written. */
     public List<FleetCommand> parse(String text) {
-        List<FleetCommand> commands = new ArrayList<FleetCommand>();
+        // By where each tag starts; two tags never start at the same place
+        TreeMap<Integer, FleetCommand> byPosition = new TreeMap<Integer, FleetCommand>();
 
         Matcher spawn = SpawnCommand.TAG.matcher(text);
-        while (spawn.find()) commands.add(SpawnCommand.from(spawn));
+        while (spawn.find()) byPosition.put(spawn.start(), SpawnCommand.from(spawn));
 
         Matcher trade = TradeCommand.TAG.matcher(text);
-        while (trade.find()) commands.add(TradeCommand.from(trade));
+        while (trade.find()) byPosition.put(trade.start(), TradeCommand.from(trade));
 
         Matcher help = HelpCommand.TAG.matcher(text);
-        while (help.find()) commands.add(HelpCommand.from(help));
+        while (help.find()) byPosition.put(help.start(), HelpCommand.from(help));
 
-        return commands;
+        return new ArrayList<FleetCommand>(byPosition.values());
     }
 }

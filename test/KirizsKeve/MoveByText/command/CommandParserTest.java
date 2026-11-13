@@ -72,11 +72,19 @@ public class CommandParserTest {
             same(1, parse("<SPAWN:pirates:1>").get(0).points(), "1 stays");
         });
 
-        test("order: every SPAWN, then TRADE, then HELP, each in the order written", () -> {
+        test("order: the order written, whatever the kinds", () -> {
             List<FleetCommand> c = parse("<HELP:nearby:10:Jangala> <TRADE:independent:20:Askonia> "
                     + "<SPAWN:pirates:30> <HELP:hegemony:40:Asharu> <SPAWN:remnants:50>");
-            same("<SPAWN:pirates:30>,<SPAWN:remnants:50>,<TRADE:independent:20:Askonia>,<HELP:nearby:10:Jangala>,"
-                    + "<HELP:hegemony:40:Asharu>", tags(c), "order");
+            same("<HELP:nearby:10:Jangala>,<TRADE:independent:20:Askonia>,<SPAWN:pirates:30>,"
+                    + "<HELP:hegemony:40:Asharu>,<SPAWN:remnants:50>", tags(c), "order");
+        });
+
+        test("faction: trimmed, and never reaches past the end of a tag", () -> {
+            same("pirates", parse("<SPAWN: pirates :40>").get(0).factionId(), "spawn faction, trimmed");
+            same("independent", parse("<TRADE: independent :50:Askonia>").get(0).factionId(), "trade faction, trimmed");
+            // A tag quoted without its values must not swallow the text up to the next real one
+            same("<SPAWN:pirates:40>", tags(parse("<SPAWN:faction_id> means <SPAWN:pirates:40>")), "spawn");
+            same("<HELP:nearby:100:Jangala>", tags(parse("<HELP:x> text <HELP:nearby:100:Jangala>")), "help");
         });
 
         test("no commands: <NONE>, plain text, broken tags", () -> {

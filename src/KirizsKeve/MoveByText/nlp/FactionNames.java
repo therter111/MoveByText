@@ -85,8 +85,12 @@ public final class FactionNames {
         return s.toLowerCase().replaceAll("[^a-z0-9]+", " ").trim();
     }
 
-    /** Levenshtein distance. */
+    /**
+     * Edits from a to b: a letter added, dropped or changed, or two neighbours swapped ("hegemnoy" is one edit
+     * from "hegemony"). The same as distance() in nlp/spacy/rules.py.
+     */
     static int distance(String a, String b) {
+        int[] before = new int[b.length() + 1]; // the row two letters of a back, for the swap
         int[] prev = new int[b.length() + 1];
         int[] cur = new int[b.length() + 1];
         for (int j = 0; j <= b.length(); j++) prev[j] = j;
@@ -95,8 +99,12 @@ public final class FactionNames {
             for (int j = 1; j <= b.length(); j++) {
                 int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
                 cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    cur[j] = Math.min(cur[j], before[j - 2] + 1);
+                }
             }
-            int[] t = prev;
+            int[] t = before;
+            before = prev;
             prev = cur;
             cur = t;
         }

@@ -11,7 +11,7 @@ import com.fs.starfarer.api.Global;
 public class MoveByTextImpl extends BaseModPlugin {
 
     /**
-     * One console for the whole run, so the backend and its conversation outlive loading a save. Static because
+     * One console for the whole run, so the backend and its worker thread outlive loading a save. Static because
      * the editor panel and its script reach it through the static methods below.
      */
     private static CommandConsole console;
@@ -20,6 +20,8 @@ public class MoveByTextImpl extends BaseModPlugin {
     public void onGameLoad(boolean newGame) {
         if (console == null) {
             console = new CommandConsole(Provider.load()); // reads the settings file, so on the game thread
+        } else {
+            console.clearHistory(); // what was said in another save has nothing to do with this one
         }
         Global.getSector().addTransientScript(new CampaignMultiLineScreenPlugin());
     }

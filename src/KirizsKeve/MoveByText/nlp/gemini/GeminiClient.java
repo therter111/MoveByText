@@ -21,22 +21,29 @@ import java.net.HttpURLConnection;
  * - Keeps a short conversation history so follow-up messages have context.
  *
  * ALL settings come from data/config/llmdata.json inside your mod folder and are read once,
- * when the object is created: apiKey, model, systemPrompt (required) and maxOutputTokens
- * (optional). Nothing is hardcoded here and there is no environment-variable fallback.
+ * when the object is created: apiKey, model, systemPrompt (required) and maxOutputTokens,
+ * temperature, timeoutSeconds (optional). Nothing is hardcoded here and there is no
+ * environment-variable fallback.
+ *
+ * apiKey, model and the optional ones may sit in a "gemini" object, like the other providers'
+ * settings, or at the top of the file, where older settings files have them. The "gemini" object
+ * wins. systemPrompt is always at the top: it is shared with KoboldCpp.
  */
 public class GeminiClient extends ChatBackend {
 
     private static final String ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
     private static final String KEY_PLACEHOLDER_PREFIX = "PASTE_";
     private static final int CONNECT_TIMEOUT_MS = 10000;
-    /** How long to wait for Gemini's answer. */
-    private static final int READ_TIMEOUT_MS = 60000;
+    /** How long to wait for Gemini's answer, unless timeoutSeconds says otherwise. */
+    private static final int DEFAULT_TIMEOUT_SECONDS = 60;
 
     private final String apiKey;
     private final String model;
     private final String systemPrompt;
     /** 0 = not set in the file, so the field is left out of the request. */
     private final int maxOutputTokens;
+    /** null = not set, so Gemini uses the model's default. */
+    private final Double temperature;
     private final HttpEndpoint gemini;
 
     /** Create this on the game thread (e.g. in onGameLoad) because it reads the settings file. */
@@ -51,17 +58,20 @@ public class GeminiClient extends ChatBackend {
 
     /** Same, but sends requests to endpointBase instead of Google, so tests can use a fake server on localhost. */
     GeminiClient(JSONObject cfg, String endpointBase) {
-        super(READ_TIMEOUT_MS, "model");
+        super(own(cfg, "timeoutSeconds").timeoutMs("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS), "model");
         Settings settings = new Settings(cfg);
 
-        String key = settings.text("apiKey");
+        String key = own(cfg, "apiKey").text("apiKey");
         if (key != null && key.startsWith(KEY_PLACEHOLDER_PREFIX)) {
             key = null; // still the template placeholder
         }
         this.apiKey = key;
-        this.model = settings.text("model");
+        this.model = own(cfg, "model").text("model");
         this.systemPrompt = settings.text("systemPrompt");
-        this.maxOutputTokens = settings.integer("maxOutputTokens", 0);
+        this.maxOutputTokens = own(cfg, "maxOutputTokens").integer("maxOutputTokens", 0);
+
+        double temp = own(cfg, "temperature").number("temperature", Double.NaN);
+        this.temperature = (Double.isNaN(temp) || temp < 0) ? null : Double.valueOf(temp);
 
         require("apiKey", apiKey);
         require("model", model);
@@ -80,6 +90,13 @@ public class GeminiClient extends ChatBackend {
         };
 
         logReady(", model = " + model);
+    }
+
+    /** Where a Gemini setting is read from: the "gemini" object when it has the key, else the top of the file. */
+    private static Settings own(JSONObject cfg, String key) {
+        Settings root = new Settings(cfg);
+        Settings block = root.block("gemini");
+        return block.value(key) != null ? block : root;
     }
 
     @Override
@@ -107,9 +124,10 @@ public class GeminiClient extends ChatBackend {
         contents.put(content("user", userText));
         body.put("contents", contents);
 
-        if (maxOutputTokens > 0) {
+        if (maxOutputTokens > 0 || temperature != null) {
             JSONObject generationConfig = new JSONObject();
-            generationConfig.put("maxOutputTokens", maxOutputTokens);
+            if (maxOutputTokens > 0) generationConfig.put("maxOutputTokens", maxOutputTokens);
+            if (temperature != null) generationConfig.put("temperature", temperature.doubleValue());
             body.put("generationConfig", generationConfig);
         }
 

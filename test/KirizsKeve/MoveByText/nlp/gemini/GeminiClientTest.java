@@ -156,6 +156,19 @@ public class GeminiClientTest {
             same(PROMPT, systemPrompt(r), "system prompt (trimmed)");
         });
 
+        test("config: a \"gemini\" object wins over the top of the file, temperature and timeoutSeconds are read", g -> {
+            JSONObject cfg = config("old-key", "old-model", PROMPT).put("maxOutputTokens", 100)
+                    .put("gemini", new JSONObject().put("apiKey", KEY).put("model", MODEL).put("temperature", 0.2)
+                            .put("timeoutSeconds", 5));
+            GeminiClient llm = new GeminiClient(cfg, g.endpoint());
+            same(MODEL, llm.modelName(), "model from the gemini object");
+            same(5000, llm.readTimeoutMs(), "timeoutSeconds from the gemini object");
+            llm.askNow("hi");
+            JSONObject gen = g.request(0).json().getJSONObject("generationConfig");
+            same(0.2, gen.getDouble("temperature"), "generationConfig.temperature");
+            same(100, gen.getInt("maxOutputTokens"), "maxOutputTokens still from the top of the file");
+        });
+
         test("config: maxOutputTokens missing, 0 or negative -> no generationConfig", g -> {
             Object[] values = {null, 0, -1, -500};
             for (int i = 0; i < values.length; i++) {

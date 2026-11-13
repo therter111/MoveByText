@@ -73,13 +73,17 @@ public class MultiLineTextFieldPanel extends CustomPanel {
     private static class EditorPanel extends CustomPanel {
         private TextFieldAPI textField;
         private LabelAPI displayLabel;
-        private ButtonAPI sendButton; // NEW: Track the Send Button
+        private ButtonAPI sendButton;
+        private ButtonAPI forgetButton;
 
         private List<String> pastLines = new ArrayList<>();
         private String lastText = "";
+        /** Whether the text field had the keyboard on the last frame, before this frame's key presses reached it. */
+        private boolean hadFocus = false;
 
         private static final float MAX_WIDTH = 700f;
         private static final Object SEND_BTN = new Object();
+        private static final Object FORGET_BTN = new Object();
 
         public EditorPanel() {
             super(320f, 400f);
@@ -93,8 +97,11 @@ public class MultiLineTextFieldPanel extends CustomPanel {
             content.setActionListenerDelegate(new ActionListenerDelegate() {
                 @Override
                 public void actionPerformed(Object data, Object src) {
-                    if (src instanceof ButtonAPI btn && btn.getCustomData() == SEND_BTN) {
+                    if (!(src instanceof ButtonAPI btn)) return;
+                    if (btn.getCustomData() == SEND_BTN) {
                         onSendClicked();
+                    } else if (btn.getCustomData() == FORGET_BTN) {
+                        MoveByTextImpl.clearLlmHistory();
                     }
                 }
             });
@@ -104,6 +111,12 @@ public class MultiLineTextFieldPanel extends CustomPanel {
                     "Send", SEND_BTN,
                     Misc.getBasePlayerColor(), Misc.getDarkPlayerColor(),
                     Alignment.MID, CutStyle.ALL, 100f, 25f, 15f
+            );
+            // Starts a new conversation: the model no longer sees the earlier messages
+            forgetButton = content.addButton(
+                    "Forget chat", FORGET_BTN,
+                    Misc.getBasePlayerColor(), Misc.getDarkPlayerColor(),
+                    Alignment.MID, CutStyle.ALL, 100f, 25f, 5f
             );
 
             add(content).inTL(0f, 0f);
@@ -128,7 +141,8 @@ public class MultiLineTextFieldPanel extends CustomPanel {
 
         @Override
         public void processInput(List<InputEventAPI> events) {
-            if (textField == null) return;
+            // Only while the player is typing here: otherwise Enter and Backspace belong to the game
+            if (textField == null || !(hadFocus || textField.hasFocus())) return;
 
             for (InputEventAPI event : events) {
                 if (event.isKeyboardEvent() && event.isKeyDownEvent()) {
@@ -156,6 +170,7 @@ public class MultiLineTextFieldPanel extends CustomPanel {
         public void advance(float delta) {
             if (textField != null) {
                 lastText = textField.getText();
+                hadFocus = textField.hasFocus();
             }
         }
 
@@ -178,11 +193,12 @@ public class MultiLineTextFieldPanel extends CustomPanel {
             float currentHeight = textField.getPosition().getHeight();
             textField.getPosition().setSize(currentWidth, currentHeight);
 
-            // 2. Force position recompute for the Send Button so it continues to shift down
-            if (sendButton != null) {
-                float btnWidth = sendButton.getPosition().getWidth();
-                float btnHeight = sendButton.getPosition().getHeight();
-                sendButton.getPosition().setSize(btnWidth, btnHeight);
+            // 2. Force position recompute for the buttons so they continue to shift down
+            for (ButtonAPI button : new ButtonAPI[]{sendButton, forgetButton}) {
+                if (button == null) continue;
+                float btnWidth = button.getPosition().getWidth();
+                float btnHeight = button.getPosition().getHeight();
+                button.getPosition().setSize(btnWidth, btnHeight);
             }
         }
 

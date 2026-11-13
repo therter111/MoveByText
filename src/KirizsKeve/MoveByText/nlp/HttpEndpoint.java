@@ -29,6 +29,33 @@ public abstract class HttpEndpoint {
         return baseUrl;
     }
 
+    /** An error answer is quoted in the message up to this many characters; a whole HTML error page helps nobody. */
+    static final int MAX_ERROR_BODY = 600;
+
+    /**
+     * A server address as the player may write it, without what doesn't belong: "gaming-pc:5001" gets "http://",
+     * trailing slashes go, and so does the first of the given path suffixes it ends with (e.g. "/api/v1/generate",
+     * for an address copied with the path after it). null stays null.
+     */
+    public static String normalizeUrl(String url, String... pathSuffixes) {
+        if (url == null) return null;
+        if (!url.contains("://")) url = "http://" + url;
+        while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
+        for (String suffix : pathSuffixes) {
+            if (url.endsWith(suffix)) {
+                url = url.substring(0, url.length() - suffix.length());
+                break;
+            }
+        }
+        return url;
+    }
+
+    private static String shortened(String responseText) {
+        if (responseText.length() <= MAX_ERROR_BODY) return responseText;
+        return responseText.substring(0, MAX_ERROR_BODY) + "... (" + (responseText.length() - MAX_ERROR_BODY)
+                + " more characters)";
+    }
+
     /**
      * One request: a JSON body when body isn't null. Returns the body of a 200 answer; anything else throws, with
      * the subclass's wording.
@@ -73,7 +100,7 @@ public abstract class HttpEndpoint {
             }
 
             if (code != 200) {
-                throw new RuntimeException(httpError(code, responseText));
+                throw new RuntimeException(httpError(code, shortened(responseText)));
             }
             return responseText;
         } finally {

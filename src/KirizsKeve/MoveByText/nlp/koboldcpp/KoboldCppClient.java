@@ -145,16 +145,7 @@ public class KoboldCppClient extends ChatBackend {
 
     /** Accepts "gaming-pc:5001", "http://gaming-pc:5001/" or the address with /api or /api/v1/generate after it. */
     static String normalizeUrl(String url) {
-        if (url == null) return null;
-        if (!url.contains("://")) url = "http://" + url;
-        while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
-        for (String suffix : new String[]{"/api/v1/generate", "/api/v1", "/api", "/v1"}) {
-            if (url.endsWith(suffix)) {
-                url = url.substring(0, url.length() - suffix.length());
-                break;
-            }
-        }
-        return url;
+        return HttpEndpoint.normalizeUrl(url, "/api/v1/generate", "/api/v1", "/api", "/v1");
     }
 
     @Override

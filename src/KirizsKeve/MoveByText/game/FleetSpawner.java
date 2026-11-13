@@ -20,6 +20,8 @@ public final class FleetSpawner {
 
     // How long a HELP fleet stays at its target before heading home
     private static final float HELP_DAYS = 30f;
+    // How long a SPAWN fleet patrols before it leaves, so spawned fleets don't pile up in the save
+    private static final float SPAWN_DAYS = 90f;
 
     private final TerminalLog log = new TerminalLog("FLEET SPAWN", FleetSpawner.class);
 
@@ -52,23 +54,31 @@ public final class FleetSpawner {
         fleet.addAssignment(
                 FleetAssignment.PATROL_SYSTEM,
                 patrolToken,
-                1000f,
+                SPAWN_DAYS,
                 "patrolling the sector"
         );
+        fleet.addAssignment(FleetAssignment.GO_TO_LOCATION_AND_DESPAWN, patrolToken, 1000f, "standing down");
 
         verifySpawn(fleet, location, "SPAWN", "patrolling " + location.getName());
     }
 
-    // sourceMarket / destMarket may be null, then a market in that location is picked
+    // sourceMarket / destMarket may be null, then a market in that location is picked (never the same one twice).
+    // start is where the fleet appears when localSystem has no market to start from, e.g. the player's position
+    // in hyperspace; null means the center of localSystem.
     public void spawnTraderFleet(String factionId, float fleetPoints, LocationAPI localSystem, MarketAPI sourceMarket,
-                                 StarSystemAPI targetSystem, MarketAPI destMarket) {
+                                 Vector2f start, StarSystemAPI targetSystem, MarketAPI destMarket) {
 
-        if (sourceMarket == null) sourceMarket = pickMarket(localSystem, factionId);
-        if (destMarket == null) destMarket = pickMarket(targetSystem, factionId);
+        if (sourceMarket != null && sourceMarket == destMarket) {
+            log.fail("TRADE FAILED: the convoy would start and end at " + sourceMarket.getName() + ", nothing spawned");
+            return;
+        }
+        if (destMarket == null) destMarket = pickMarket(targetSystem, factionId, sourceMarket);
+        if (sourceMarket == null) sourceMarket = pickMarket(localSystem, factionId, destMarket);
+        if (start == null) start = new Vector2f();
 
         Vector2f locInHyper = localSystem instanceof StarSystemAPI
                 ? ((StarSystemAPI) localSystem).getLocation()
-                : new Vector2f(); // hyperspace has no system location, fall back to its origin
+                : start; // in hyperspace the start already is a hyperspace position
 
         FleetParamsV3 params = new FleetParamsV3(
                 sourceMarket,
@@ -90,10 +100,10 @@ public final class FleetSpawner {
 
         fleet.getMemoryWithoutUpdate().set(MemFlags.MEMORY_KEY_TRADE_FLEET, true);
 
-        // Spawn at the local market if there is one, otherwise at the system center
+        // Spawn at the local market if there is one, otherwise at the start position
         SectorEntityToken source = sourceMarket != null
                 ? sourceMarket.getPrimaryEntity()
-                : localSystem.createToken(0f, 0f);
+                : localSystem.createToken(start.x, start.y);
         SectorEntityToken dest = destMarket != null
                 ? destMarket.getPrimaryEntity()
                 : targetSystem.getCenter();
@@ -106,7 +116,7 @@ public final class FleetSpawner {
         fleet.addAssignment(FleetAssignment.ORBIT_PASSIVE, dest, 3f, "unloading cargo");
         fleet.addAssignment(FleetAssignment.GO_TO_LOCATION_AND_DESPAWN, source, 1000f, "returning home");
 
-        String from = sourceMarket != null ? sourceMarket.getName() : localSystem.getName() + " center (no market)";
+        String from = sourceMarket != null ? sourceMarket.getName() : localSystem.getName() + " (no market)";
         String to = destMarket != null ? destMarket.getName() : targetSystem.getName() + " center (no market)";
         verifySpawn(fleet, localSystem, "TRADE", "from " + from + " to " + to);
     }
@@ -118,7 +128,7 @@ public final class FleetSpawner {
         String protectedFactionId = protectedFaction(targetSystem, targetMarket);
         MarketAPI sourceMarket = pickHelperMarket(targetSystem, targetMarket, protectedFactionId, factionId);
         if (sourceMarket == null) {
-            log.line("HELP FAILED: no " + (factionId != null ? "'" + factionId + "' " : "friendly ")
+            log.fail("HELP FAILED: no " + (factionId != null ? "'" + factionId + "' " : "friendly ")
                     + "market found to send help to " + targetSystem.getName() + ", nothing spawned");
             return;
         }
@@ -213,7 +223,7 @@ public final class FleetSpawner {
 
     private boolean isEmpty(CampaignFleetAPI fleet, String tag, String factionId) {
         if (fleet != null && fleet.getFleetData().getNumMembers() > 0) return false;
-        log.line(tag + " FAILED: fleet for faction '" + factionId + "' came out empty (bad faction id or too few points?), nothing spawned");
+        log.fail(tag + " FAILED: fleet for faction '" + factionId + "' came out empty (bad faction id or too few points?), nothing spawned");
         return true;
     }
 
@@ -223,9 +233,12 @@ public final class FleetSpawner {
         boolean hasOrders = fleet.getCurrentAssignment() != null;
 
         if (!inLocation || !hasOrders) {
-            log.line(tag + " FAILED: " + fleet.getName() + " inLocation=" + inLocation + " hasOrders=" + hasOrders);
+            log.fail(tag + " FAILED: " + fleet.getName() + " inLocation=" + inLocation + " hasOrders=" + hasOrders);
             return;
         }
+
+        // The short version for the player; the details below stay in the terminal and the log
+        log.show(fleet.getName() + " (" + fleet.getFleetPoints() + " FP) in " + location.getName() + ", " + route);
 
         log.line(tag + " OK: " + fleet.getName()
                 + " [" + fleet.getFaction().getDisplayName() + ", " + fleet.getFleetData().getNumMembers() + " ships, "
@@ -234,11 +247,12 @@ public final class FleetSpawner {
                 + ", current order: " + fleet.getCurrentAssignment().getActionText());
     }
 
-    // Prefers a market of the given faction, falls back to any visible market in the location
-    private static MarketAPI pickMarket(LocationAPI location, String factionId) {
+    // Prefers a market of the given faction, falls back to any visible market in the location. Never picks
+    // other (may be null): the market at the other end of the trip.
+    private static MarketAPI pickMarket(LocationAPI location, String factionId, MarketAPI other) {
         MarketAPI fallback = null;
         for (MarketAPI market : Global.getSector().getEconomy().getMarkets(location)) {
-            if (market.isHidden() || market.getPrimaryEntity() == null) continue;
+            if (market == other || market.isHidden() || market.getPrimaryEntity() == null) continue;
             if (factionId.equals(market.getFactionId())) return market;
             if (fallback == null) fallback = market;
         }

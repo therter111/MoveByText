@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * (Gemini, KoboldCpp running e.g. a local Qwen, or a Rasa or spaCy NLU server, which ignore the prompt) with the real system prompt from data/config/llmdata.json and checks the command tags that come back. Nothing in the game is touched.
  *
  * A reply passes when the game would do the same with it as with an expected reply, so it is as lenient as
- * MoveByTextImpl: tags in any order (the game runs all SPAWN tags, then TRADE, then HELP), place names in any
+ * MoveByTextImpl: tags in any order (the fleets are independent of each other), place names in any
  * case or with " system" after them, and sizes outside 1-300 capped. Faction ids must still be exact.
  * A wrong reply is asked once more: right the second time is FLAKY, wrong twice is FAIL.
  *

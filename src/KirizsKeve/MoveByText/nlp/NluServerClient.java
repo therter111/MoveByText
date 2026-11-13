@@ -121,16 +121,7 @@ public abstract class NluServerClient extends AbstractBackend {
 
     /** Accepts "localhost:5005", "http://127.0.0.1:5005/" or the address with /model/parse after it. */
     static String normalizeUrl(String url) {
-        if (url == null) return null;
-        if (!url.contains("://")) url = "http://" + url;
-        while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
-        for (String suffix : new String[]{"/model/parse", "/model", "/webhooks/rest/webhook"}) {
-            if (url.endsWith(suffix)) {
-                url = url.substring(0, url.length() - suffix.length());
-                break;
-            }
-        }
-        return url;
+        return HttpEndpoint.normalizeUrl(url, "/model/parse", "/model", "/webhooks/rest/webhook");
     }
 
     /** Where the server is, without a trailing slash. */

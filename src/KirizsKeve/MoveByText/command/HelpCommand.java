@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  */
 public final class HelpCommand extends FleetCommand {
 
-    static final Pattern TAG = Pattern.compile("<HELP:([^:]+):(\\d+):([^:>]+)>");
+    static final Pattern TAG = Pattern.compile("<HELP:([^:<>]+):(\\d+):([^:>]+)>");
 
     /** The faction in a tag that names none: the closest friendly one helps. */
     static final String NEARBY = "nearby";
@@ -47,9 +47,11 @@ public final class HelpCommand extends FleetCommand {
 
     @Override
     public void execute(PlaceFinder places, FleetSpawner fleets) {
+        if (factionId() != null && !factionExists()) return;
+
         Place place = places.find(target);
         if (place == null) {
-            LOG.line("HELP FAILED: no star system, market or planet named '" + target + "', nothing spawned");
+            LOG.fail("HELP FAILED: no star system, market or planet named '" + target + "', nothing spawned");
             return;
         }
 

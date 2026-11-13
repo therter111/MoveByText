@@ -3,6 +3,7 @@ package KirizsKeve.MoveByText.command;
 import KirizsKeve.MoveByText.game.FleetSpawner;
 import KirizsKeve.MoveByText.game.PlaceFinder;
 import KirizsKeve.MoveByText.game.TerminalLog;
+import com.fs.starfarer.api.Global;
 
 /**
  * One fleet the player asked for, e.g. <SPAWN:pirates:40>. Every provider answers with these as tags: the LLMs
@@ -46,8 +47,18 @@ public abstract class FleetCommand {
 
     /** A spawn that threw: reported, so one bad command doesn't stop the others. */
     protected final void crashed(Exception e) {
-        LOG.line(kind() + " crashed: " + e);
+        LOG.fail(kind() + " crashed: " + e);
         e.printStackTrace();
+    }
+
+    /**
+     * False, with a message, when the tag names a faction the running game doesn't have (a model's typo, a
+     * made-up id). Game thread only.
+     */
+    protected final boolean factionExists() {
+        if (Global.getSector().getFaction(factionId) != null) return true;
+        LOG.fail(kind() + " FAILED: the game has no faction with the id '" + factionId + "', nothing spawned");
+        return false;
     }
 
     @Override

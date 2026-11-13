@@ -1,7 +1,7 @@
 {
   "id": "KirizsKeve_MoveByText",
   "name": "MoveByText",
-  "author": "Kirizs Kece",
+  "author": "Kirizs Keve",
   "utility": false,
   "version": { "major": '0', "minor": '1', "patch": '0' },
   "description": "Starsector NLP mod.",
@@ -9,18 +9,6 @@
   "jars": [ "jars/MoveByText.jar" ],
   "modPlugin": "KirizsKeve.MoveByText.MoveByTextImpl",
   "dependencies": [
-    {
-        "id": "lw_lazylib",
-        "name": "LazyLib"
-    },
-    {
-        "id": "MagicLib",
-        "name": "MagicLib"
-    },
-    {
-        "id": "shaderLib",
-        "name": "GraphicsLib"
-    },
     {
         "id":"rolflection_lib",
         "name": "RolflectionLib"

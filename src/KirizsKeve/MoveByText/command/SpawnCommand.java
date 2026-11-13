@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 /** <SPAWN:remnants:200>: an aggressive fleet of that faction appears next to the player. */
 public final class SpawnCommand extends FleetCommand {
 
-    static final Pattern TAG = Pattern.compile("<SPAWN:([^:]+):(\\d+)>");
+    static final Pattern TAG = Pattern.compile("<SPAWN:([^:<>]+):(\\d+)>");
 
     /** How far from the player the fleet appears, on both axes. */
     private static final float OFFSET = 600f;
@@ -22,7 +22,7 @@ public final class SpawnCommand extends FleetCommand {
     }
 
     static SpawnCommand from(Matcher tag) {
-        return new SpawnCommand(tag.group(1), parsePoints(tag.group(2)));
+        return new SpawnCommand(tag.group(1).trim(), parsePoints(tag.group(2)));
     }
 
     @Override
@@ -37,6 +37,8 @@ public final class SpawnCommand extends FleetCommand {
 
     @Override
     public void execute(PlaceFinder places, FleetSpawner fleets) {
+        if (!factionExists()) return;
+
         LocationAPI system = Global.getSector().getPlayerFleet().getContainingLocation();
         Vector2f playerCoords = Global.getSector().getPlayerFleet().getLocation();
         Vector2f spawnCoords = new Vector2f(playerCoords.x + OFFSET, playerCoords.y + OFFSET);
