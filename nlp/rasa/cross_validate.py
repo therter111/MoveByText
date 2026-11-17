@@ -107,7 +107,9 @@ def rel(path):
 def read_examples(path):
     """(intent, example line) pairs from a nlu.yml written by generate_nlu.py, in file order."""
     pairs, intent = [], None
-    for line in open(path, encoding="utf-8").read().split("\n"):
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    for line in text.split("\n"):
         m = re.match(r"^- intent: (.+)$", line)
         if m:
             intent = m.group(1).strip()

@@ -31,7 +31,7 @@ public final class ChatHistory {
     }
 
     private final int maxMessages;
-    private final List<Turn> turns = new ArrayList<Turn>();
+    private final List<Turn> turns = new ArrayList<>();
 
     public ChatHistory(int maxMessages) {
         this.maxMessages = maxMessages;

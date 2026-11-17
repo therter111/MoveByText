@@ -1,12 +1,11 @@
 package KirizsKeve.MoveByText.nlp;
 
 import KirizsKeve.MoveByText.LlmPromptTest;
+import KirizsKeve.MoveByText.TestSuite;
 import KirizsKeve.MoveByText.nlp.rasa.RasaClient;
 import KirizsKeve.MoveByText.nlp.spacy.SpacyClient;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.varia.NullAppender;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -20,10 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -31,6 +27,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+
+import static KirizsKeve.MoveByText.Check.*;
 
 /**
  * Offline tests for RasaClient: settings, the /model/parse request, turning the answer into tags, errors, /status
@@ -44,14 +42,10 @@ public class RasaClientTest {
 
     private static final long WAIT_MS = 10000;
 
-    private interface Test {
-        void run(FakeRasa rasa) throws Exception;
-    }
+    public static final TestSuite<FakeRasa> SUITE = new TestSuite<>("RasaClientTest", FakeRasa::new, FakeRasa::stop);
 
-    private static final Map<String, Test> TESTS = new LinkedHashMap<>();
-
-    private static void test(String name, Test body) {
-        TESTS.put(name, body);
+    private static void test(String name, TestSuite.Test<FakeRasa> body) {
+        SUITE.add(name, body);
     }
 
     static {
@@ -59,7 +53,7 @@ public class RasaClientTest {
             check(Provider.backendFor(new JSONObject().put("provider", " Rasa ")) instanceof RasaClient, "provider Rasa");
             JSONObject example = LlmPromptTest.readConfig(Paths.get("data/config/llmdata.json.example"));
             check(example.has("rasa"), "the example file should have a rasa block");
-            LlmBackend llm = Provider.backendFor(example.put("provider", "rasa"));
+            Backend llm = Provider.backendFor(example.put("provider", "rasa"));
             check(llm instanceof RasaClient && llm.isConfigured(), "the example's rasa block should give a ready RasaClient");
         });
 
@@ -184,7 +178,7 @@ public class RasaClientTest {
             check(Provider.backendFor(new JSONObject().put("provider", " spaCy ")) instanceof SpacyClient, "provider spaCy");
             JSONObject example = LlmPromptTest.readConfig(Paths.get("data/config/llmdata.json.example"));
             check(example.has("spacy"), "the example file should have a spacy block");
-            LlmBackend llm = Provider.backendFor(example.put("provider", "spacy"));
+            Backend llm = Provider.backendFor(example.put("provider", "spacy"));
             check(llm instanceof SpacyClient && llm.isConfigured(), "the example's spacy block should give a ready SpacyClient");
         });
 
@@ -319,29 +313,7 @@ public class RasaClientTest {
     // ------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
-        BasicConfigurator.configure(new NullAppender());
-        String filter = args.length > 0 ? args[0] : null;
-        int run = 0, failed = 0;
-        for (Map.Entry<String, Test> t : TESTS.entrySet()) {
-            if (filter != null && !t.getKey().contains(filter)) continue;
-            run++;
-            FakeRasa rasa = null;
-            try {
-                rasa = new FakeRasa();
-                t.getValue().run(rasa);
-                System.out.println("PASS   " + t.getKey());
-            } catch (Throwable e) {
-                failed++;
-                System.out.println("FAIL   " + t.getKey());
-                String detail = e instanceof AssertionError ? e.getMessage() : "unexpected " + e;
-                System.out.println("       " + String.valueOf(detail).replace("\n", "\n       "));
-            } finally {
-                if (rasa != null) rasa.stop();
-            }
-        }
-        System.out.println();
-        System.out.println((run - failed) + "/" + run + " passed");
-        System.exit(failed == 0 && run > 0 ? 0 : 1);
+        SUITE.main(args);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -427,7 +399,7 @@ public class RasaClientTest {
         }
     }
 
-    private static class Calls implements LlmBackend.Callback {
+    private static class Calls implements Backend.Callback {
         static class Call {
             final boolean ok;
             final String text;
@@ -534,32 +506,5 @@ public class RasaClientTest {
         List<String> keys = new ArrayList<>();
         for (java.util.Iterator<?> it = json.keys(); it.hasNext(); ) keys.add(String.valueOf(it.next()));
         return keys;
-    }
-
-    private interface Code {
-        void run() throws Exception;
-    }
-
-    private static Throwable fails(Code code, String what) {
-        try {
-            code.run();
-        } catch (Throwable e) {
-            return e;
-        }
-        throw new AssertionError(what + ": expected an exception");
-    }
-
-    private static void check(boolean condition, String message) {
-        if (!condition) throw new AssertionError(message);
-    }
-
-    private static void same(Object expected, Object actual, String what) {
-        if (!Objects.equals(expected, actual)) {
-            throw new AssertionError(what + "\nexpected: " + expected + "\nactual:   " + actual);
-        }
-    }
-
-    private static void has(String text, String part, String what) {
-        if (text == null || !text.contains(part)) throw new AssertionError(what + " should contain " + part + "\nactual: " + text);
     }
 }

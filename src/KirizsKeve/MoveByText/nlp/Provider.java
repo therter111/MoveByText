@@ -20,25 +20,25 @@ public enum Provider {
 
     GEMINI("gemini") {
         @Override
-        public LlmBackend create(JSONObject cfg) {
+        public Backend create(JSONObject cfg) {
             return new GeminiClient(cfg);
         }
     },
     KOBOLDCPP("koboldcpp") {
         @Override
-        public LlmBackend create(JSONObject cfg) {
+        public Backend create(JSONObject cfg) {
             return new KoboldCppClient(cfg);
         }
     },
     RASA("rasa") {
         @Override
-        public LlmBackend create(JSONObject cfg) {
+        public Backend create(JSONObject cfg) {
             return new RasaClient(cfg);
         }
     },
     SPACY("spacy") {
         @Override
-        public LlmBackend create(JSONObject cfg) {
+        public Backend create(JSONObject cfg) {
             return new SpacyClient(cfg);
         }
     };
@@ -55,7 +55,7 @@ public enum Provider {
     }
 
     /** This provider's backend for the given settings. Takes them directly, so tests can run outside the game. */
-    public abstract LlmBackend create(JSONObject cfg);
+    public abstract Backend create(JSONObject cfg);
 
     /** The provider the settings pick; Gemini when none is set, and with a warning when the name is unknown. */
     public static Provider of(JSONObject cfg) {
@@ -69,12 +69,15 @@ public enum Provider {
     }
 
     /** The backend the settings pick. */
-    public static LlmBackend backendFor(JSONObject cfg) {
+    public static Backend backendFor(JSONObject cfg) {
         return of(cfg).create(cfg);
     }
 
-    /** The backend the settings file picks. Call on the game thread (e.g. in onGameLoad): it reads the file. */
-    public static LlmBackend load() {
+    /**
+     * The backend the settings file picks. Call on the game thread: it reads the file. The mod's own onGameLoad uses
+     * backendFor(Settings.load(names)) instead, to read the file once for the backend and the panel.
+     */
+    public static Backend load() {
         return backendFor(Settings.load());
     }
 }

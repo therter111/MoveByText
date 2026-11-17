@@ -1,31 +1,26 @@
 package KirizsKeve.MoveByText.command;
 
-import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.varia.NullAppender;
+import KirizsKeve.MoveByText.TestSuite;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+
+import static KirizsKeve.MoveByText.Check.*;
 
 /**
  * Offline tests for the fleet commands: reading tags out of a provider's reply (CommandParser), and writing them
  * (toTag), which CommandBuilder uses for the NLU providers. Carrying a command out needs a running game, so
  * execute() is not tested here.
  *
- * Run main() from IntelliJ. Pass a word to run only the tests whose name contains it. Exits with 1 on any failure.
+ * Run main() from IntelliJ, or every offline suite with AllOfflineTests. Pass a word to run only the tests whose name
+ * contains it. Exits with 1 on any failure.
  */
 public class CommandParserTest {
 
-    private interface Test {
-        void run() throws Exception;
-    }
+    public static final TestSuite<Void> SUITE = TestSuite.plain("CommandParserTest");
 
-    private static final Map<String, Test> TESTS = new LinkedHashMap<>();
-
-    private static void test(String name, Test body) {
-        TESTS.put(name, body);
+    private static void test(String name, TestSuite.PlainTest body) {
+        SUITE.add(name, body);
     }
 
     static {
@@ -126,25 +121,7 @@ public class CommandParserTest {
     // ------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
-        BasicConfigurator.configure(new NullAppender()); // the size warnings also go to log4j; keep the output to results
-        String filter = args.length > 0 ? args[0] : null;
-        int run = 0, failed = 0;
-        for (Map.Entry<String, Test> t : TESTS.entrySet()) {
-            if (filter != null && !t.getKey().contains(filter)) continue;
-            run++;
-            try {
-                t.getValue().run();
-                System.out.println("PASS   " + t.getKey());
-            } catch (Throwable e) {
-                failed++;
-                System.out.println("FAIL   " + t.getKey());
-                String detail = e instanceof AssertionError ? e.getMessage() : "unexpected " + e;
-                System.out.println("       " + String.valueOf(detail).replace("\n", "\n       "));
-            }
-        }
-        System.out.println();
-        System.out.println((run - failed) + "/" + run + " passed");
-        System.exit(failed == 0 && run > 0 ? 0 : 1);
+        SUITE.main(args);
     }
 
     private static List<FleetCommand> parse(String text) {
@@ -156,19 +133,5 @@ public class CommandParserTest {
         List<String> tags = new ArrayList<>();
         for (FleetCommand c : commands) tags.add(c.toTag());
         return String.join(",", tags);
-    }
-
-    private static void check(boolean condition, String what) {
-        if (!condition) throw new AssertionError(what);
-    }
-
-    private static void same(Object expected, Object actual, String what) {
-        if (!Objects.equals(expected, actual)) {
-            throw new AssertionError(what + "\nexpected: " + show(expected) + "\nactual:   " + show(actual));
-        }
-    }
-
-    private static String show(Object value) {
-        return value instanceof String ? "\"" + value + "\"" : String.valueOf(value);
     }
 }

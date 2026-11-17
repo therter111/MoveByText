@@ -1,8 +1,6 @@
 package KirizsKeve.MoveByText.nlp;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,7 +8,7 @@ import java.util.Map;
 /** The size words of the system prompt, plus the words for size math ("twice", "half", "plus 30"). */
 public final class SizeWords {
 
-    private static final Map<String, Integer> TIERS = new LinkedHashMap<String, Integer>();
+    private static final Map<String, Integer> TIERS = new LinkedHashMap<>();
     private static final List<String> BY_LENGTH;
 
     static {
@@ -22,13 +20,8 @@ public final class SizeWords {
         tier(300, "humongous", "gigantic", "enormous", "colossal", "armada", "invasion", "biggest", "largest",
                 "maximum", "max", "the biggest possible");
 
-        List<String> keys = new ArrayList<String>(TIERS.keySet());
-        Collections.sort(keys, new Comparator<String>() {
-            @Override
-            public int compare(String a, String b) {
-                return b.length() - a.length();
-            }
-        });
+        List<String> keys = new ArrayList<>(TIERS.keySet());
+        keys.sort((a, b) -> b.length() - a.length());
         BY_LENGTH = keys;
     }
 

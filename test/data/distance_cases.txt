@@ -1,0 +1,22 @@
+# Cases for the typo distance, which exists twice: FactionNames.distance (Java) and distance() in
+# nlp/spacy/rules.py (Python). Both must give the same answers, so both are tested against this one table:
+# ConsistencyTest for Java, nlp/spacy/test_distance.py for Python (build.py runs both).
+#
+# One case per line: word, word, edits. "-" stands for the empty word. An edit is a letter added, dropped or
+# changed, or two neighbouring letters swapped; a swapped pair can't be edited again (optimal string alignment).
+hegemony    hegemony    0
+hegemnoy    hegemony    1
+hegemonny   hegemony    1
+hgemony     hegemony    1
+hegemoni    hegemony    1
+tritachion  tritachyon  1
+pirrates    pirates     1
+pathers     pather      1
+ab          ba          1
+abcd        badc        2
+kitten      sitting     3
+ca          abc         3
+-           abc         3
+abc         -           3
+-           -           0
+remnants    omega       6

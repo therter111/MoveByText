@@ -34,12 +34,14 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 MOD = os.path.dirname(os.path.dirname(HERE))  # the mod folder: this script is in nlp/rasa
 PORT = 5006
-EXE = ".exe" if os.name == "nt" else ""
-CORE = os.path.normpath(os.path.join(MOD, "..", "..", "starsector-core"))
-MOD_LIBS = [os.path.normpath(os.path.join(MOD, "..", p)) for p in (
-    "LazyLib/jars/LazyLib.jar", "MagicLib/jars/MagicLib.jar", "GraphicsLib/jars/Graphics.jar",
-    "RolflectionLib-SS-main/jars/RolflectionLibJAR.jar")]
-CLASSPATH = os.pathsep.join(sorted(glob.glob(os.path.join(CORE, "*.jar"))) + [p for p in MOD_LIBS if os.path.exists(p)])
+
+# The JDK, the classpath and javac come from the mod's own build script
+sys.path.insert(0, MOD)
+import build  # noqa: E402
+
+EXE = build.EXE
+CLASSPATH = build.classpath()
+find_jdk = build.find_jdk
 TEST_FILES = ["LlmPromptTest", "LlmPromptAdvancedCases", "LlmPromptExtensiveCases", "LlmTestReport"]
 SETS = ["basic", "advanced", "extensive"]
 ENV = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8", TF_CPP_MIN_LOG_LEVEL="2",
@@ -50,29 +52,11 @@ def say(msg):
     print("[%s] %s" % (time.strftime("%H:%M:%S"), msg), flush=True)
 
 
-def find_jdk():
-    """The bin folder of a JDK: JAVA_HOME, else the newest in ~/.jdks, else javac on the PATH."""
-    homes = [os.environ["JAVA_HOME"]] if os.environ.get("JAVA_HOME") else []
-    homes += sorted(glob.glob(os.path.join(os.path.expanduser("~"), ".jdks", "*")), reverse=True)
-    for home in homes:
-        if os.path.exists(os.path.join(home, "bin", "javac" + EXE)):
-            return os.path.join(home, "bin")
-    javac = shutil.which("javac")
-    if javac:
-        return os.path.dirname(javac)
-    sys.exit("No JDK found. Set JAVA_HOME to a JDK 17 or newer.")
-
-
 def compile_tests(jdk, classes):
-    sources = glob.glob(os.path.join(MOD, "src", "**", "*.java"), recursive=True)
+    """The mod's code and the LlmPromptTest files, into classes."""
+    sources = build.java_files("src")
     sources += [os.path.join(MOD, "test", "KirizsKeve", "MoveByText", f + ".java") for f in TEST_FILES]
-    argfile = os.path.join(classes, "..", "sources.txt")
-    with open(argfile, "w", encoding="utf-8") as f:
-        # Forward slashes: a backslash inside quotes is an escape character in javac argument files
-        f.write("\n".join('"%s"' % s.replace("\\", "/") for s in sources))
-    subprocess.run([os.path.join(jdk, "javac" + EXE), "-encoding", "UTF-8", "-nowarn", "-d", classes,
-                    "-cp", CLASSPATH, "@" + argfile], check=True)
-    say("compiled %d source files" % len(sources))
+    build.javac(jdk, sources, classes, CLASSPATH)
 
 
 def write_config(path, provider="rasa", port=PORT):
@@ -155,14 +139,14 @@ def evaluate(label, model, out, jdk, classes, config, server_cmd=None, port=PORT
 
     console = proc.stdout + proc.stderr
     open(os.path.join(out, "console.txt"), "w", encoding="utf-8").write(console)
-    m = re.search(r"Writing the results to (.+\.log)", console)
-    if m and os.path.exists(m.group(1).strip()):
-        shutil.move(m.group(1).strip(), os.path.join(out, "report.log"))  # out of test/logs, next to the rest
+    report = report_path(console)
+    if report and os.path.exists(report):
+        shutil.move(report, os.path.join(out, "report.log"))  # out of test/logs, next to the rest
     cases = parse_console(console)
-    m = re.search(r"^(\d+)/(\d+) passed", console, re.M)
-    if not m or int(m.group(2)) != len(cases):
+    counts = summary_counts(console)
+    if not counts or counts[1] != len(cases):
         raise RuntimeError("%s: could not read the test result, see %s" % (label, os.path.join(out, "console.txt")))
-    result = dict(label=label, model=model, passed=int(m.group(1)), total=int(m.group(2)),
+    result = dict(label=label, model=model, passed=counts[0], total=counts[1],
                   minutes=round((time.time() - started) / 60, 1), cases=cases)
     for s in SETS:
         selected = [c for c in cases if c[0] == s]
@@ -172,6 +156,18 @@ def evaluate(label, model, out, jdk, classes, config, server_cmd=None, port=PORT
         label, result["passed"], result["total"], pct(result["passed"], result["total"]),
         *result["basic"], *result["advanced"], *result["extensive"]))
     return result
+
+
+def summary_counts(console):
+    """(passed, total) from LlmPromptTest's "N/M passed" summary line, or None when there is none."""
+    m = re.search(r"^(\d+)/(\d+) passed", console, re.M)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def report_path(console):
+    """The log file LlmPromptTest says it writes ("Writing the results to ..."), or None."""
+    m = re.search(r"Writing the results to (.+\.log)", console)
+    return m.group(1).strip() if m else None
 
 
 def pct(a, b):

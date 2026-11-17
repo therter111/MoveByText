@@ -146,7 +146,7 @@ public abstract class NluServerClient extends AbstractBackend {
     @Override
     protected final String request(String userText) throws Exception {
         log().info("Sending text to " + serverName + " at " + url + "...");
-        List<JSONObject> parses = new ArrayList<JSONObject>();
+        List<JSONObject> parses = new ArrayList<>();
         for (String sentence : pieces(userText)) {
             JSONObject body = new JSONObject();
             body.put("text", sentence);
@@ -162,7 +162,7 @@ public abstract class NluServerClient extends AbstractBackend {
      * least one piece, so an empty message still gets an answer.
      */
     protected static List<String> sentences(String text) {
-        List<String> out = new ArrayList<String>();
+        List<String> out = new ArrayList<>();
         for (String piece : String.valueOf(text).split("(?<=[.!?;])\\s+|[\\r\\n]+")) {
             String s = piece.trim();
             if (!s.isEmpty() && out.size() < MAX_SENTENCES) out.add(s);

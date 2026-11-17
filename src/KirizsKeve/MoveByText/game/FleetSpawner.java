@@ -15,8 +15,56 @@ import com.fs.starfarer.api.impl.campaign.ids.MemFlags;
 import com.fs.starfarer.api.util.Misc;
 import org.lwjgl.util.vector.Vector2f;
 
-/** Creates the fleets the commands ask for, gives them their orders and reports how it went. Game thread only. */
+/**
+ * Creates the fleets the commands ask for, gives them their orders and reports how it went. Game thread only.
+ * The fleets themselves come from a FleetMaker: by default the game's FleetFactoryV3 (see paramsFor), in the offline
+ * tests a fake. FleetFactoryV3 and FleetParamsV3 with a market need the running game (its clock, ship quality).
+ */
 public final class FleetSpawner {
+
+    /** Makes the fleet a request describes; null or an empty fleet when the faction can't make one. */
+    public interface FleetMaker {
+        CampaignFleetAPI make(FleetRequest request);
+    }
+
+    /**
+     * The fleet FleetSpawner wants, in its own terms: everything it decides about a fleet before the game makes it.
+     * The rest of FleetParamsV3 is the same for every fleet here (see paramsFor).
+     */
+    public static final class FleetRequest {
+        /** The market it comes from, for its ships and quality; null for a fleet from nowhere (SPAWN). */
+        public final MarketAPI source;
+        /** Where the fleet starts, in hyperspace: it decides the fleet's quality without a market. */
+        public final Vector2f locInHyper;
+        public final String factionId;
+        /** One of FleetTypes. */
+        public final String fleetType;
+        public final float combatPts;
+        public final float freighterPts;
+        public final float tankerPts;
+
+        public FleetRequest(MarketAPI source, Vector2f locInHyper, String factionId, String fleetType, float combatPts,
+                            float freighterPts, float tankerPts) {
+            this.source = source;
+            this.locInHyper = locInHyper;
+            this.factionId = factionId;
+            this.fleetType = fleetType;
+            this.combatPts = combatPts;
+            this.freighterPts = freighterPts;
+            this.tankerPts = tankerPts;
+        }
+    }
+
+    /**
+     * The game's parameters for a request: no transports, liners or utility ships, no quality change, and the size
+     * asked for, whatever the source market's own fleet size would be (ignoreMarketFleetSizeMult).
+     */
+    public static FleetParamsV3 paramsFor(FleetRequest r) {
+        FleetParamsV3 params = new FleetParamsV3(r.source, r.locInHyper, r.factionId, null, r.fleetType,
+                r.combatPts, r.freighterPts, r.tankerPts, 0f, 0f, 0f, 0f);
+        params.ignoreMarketFleetSizeMult = true;
+        return params;
+    }
 
     // How long a HELP fleet stays at its target before heading home
     private static final float HELP_DAYS = 30f;
@@ -24,22 +72,22 @@ public final class FleetSpawner {
     private static final float SPAWN_DAYS = 90f;
 
     private final TerminalLog log = new TerminalLog("FLEET SPAWN", FleetSpawner.class);
+    private final FleetMaker maker;
+
+    /** Fleets from the game's own FleetFactoryV3. */
+    public FleetSpawner() {
+        this(request -> FleetFactoryV3.createFleet(paramsFor(request)));
+    }
+
+    public FleetSpawner(FleetMaker maker) {
+        this.maker = maker;
+    }
 
     public void spawnAIFleet(String factionId, float combatPoints, LocationAPI location, Vector2f coordinates) {
 
-        FleetParamsV3 params = new FleetParamsV3(
-                null,
-                coordinates,
-                factionId,
-                null,
-                FleetTypes.PATROL_LARGE,
-                combatPoints,
-                0f, 0f, 0f, 0f, 0f, 0f
-        );
-        params.ignoreMarketFleetSizeMult = true;
-
         // Generate the fleet, blindly trusting the factionId is correct
-        CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
+        CampaignFleetAPI fleet = maker.make(new FleetRequest(null, coordinates, factionId, FleetTypes.PATROL_LARGE,
+                combatPoints, 0f, 0f));
         if (isEmpty(fleet, "SPAWN", factionId)) return;
 
         fleet.setName(spawnedName(fleet, "Patrol"));
@@ -77,23 +125,13 @@ public final class FleetSpawner {
         if (start == null) start = new Vector2f();
 
         Vector2f locInHyper = localSystem instanceof StarSystemAPI
-                ? ((StarSystemAPI) localSystem).getLocation()
+                ? localSystem.getLocation()
                 : start; // in hyperspace the start already is a hyperspace position
 
-        FleetParamsV3 params = new FleetParamsV3(
-                sourceMarket,
-                locInHyper,
-                factionId,
-                null,
-                FleetTypes.TRADE,
+        CampaignFleetAPI fleet = maker.make(new FleetRequest(sourceMarket, locInHyper, factionId, FleetTypes.TRADE,
                 fleetPoints * 0.15f, // light escort - the three parts add up to the requested size
                 fleetPoints * 0.65f,
-                fleetPoints * 0.2f, // tankers for the jump
-                0f, 0f, 0f, 0f
-        );
-        params.ignoreMarketFleetSizeMult = true;
-
-        CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
+                fleetPoints * 0.2f)); // tankers for the jump
         if (isEmpty(fleet, "TRADE", factionId)) return;
 
         fleet.setName(spawnedName(fleet, "Trader"));
@@ -133,20 +171,10 @@ public final class FleetSpawner {
             return;
         }
 
-        FleetParamsV3 params = new FleetParamsV3(
-                sourceMarket,
-                sourceMarket.getStarSystem().getLocation(),
-                sourceMarket.getFactionId(),
-                null,
-                FleetTypes.TASK_FORCE,
-                combatPoints,
+        CampaignFleetAPI fleet = maker.make(new FleetRequest(sourceMarket, sourceMarket.getStarSystem().getLocation(),
+                sourceMarket.getFactionId(), FleetTypes.TASK_FORCE, combatPoints,
                 0f,
-                combatPoints * 0.1f, // tankers in case the trip crosses hyperspace
-                0f, 0f, 0f, 0f
-        );
-        params.ignoreMarketFleetSizeMult = true;
-
-        CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
+                combatPoints * 0.1f)); // tankers in case the trip crosses hyperspace
         if (isEmpty(fleet, "HELP", sourceMarket.getFactionId())) return;
 
         fleet.setName(spawnedName(fleet, "Relief Force"));

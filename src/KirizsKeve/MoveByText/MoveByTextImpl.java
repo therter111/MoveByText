@@ -1,42 +1,132 @@
 package KirizsKeve.MoveByText;
 
+import KirizsKeve.MoveByText.game.SectorNames;
+import KirizsKeve.MoveByText.nlp.Backend;
+import KirizsKeve.MoveByText.nlp.GameNames;
 import KirizsKeve.MoveByText.nlp.Provider;
+import KirizsKeve.MoveByText.nlp.Settings;
 import com.fs.starfarer.api.BaseModPlugin;
 import com.fs.starfarer.api.Global;
+import org.apache.log4j.Logger;
+import org.json.JSONObject;
+import org.lwjgl.input.Keyboard;
 
 /**
- * The mod's entry point (modPlugin in mod_info.json): on every game load it makes sure there is a CommandConsole
- * and adds the editor panel to the campaign screen.
+ * The mod's entry point (modPlugin in mod_info.json): on every game load it reads the settings again, gives the
+ * CommandConsole a backend made from them and adds the editor panel to the campaign screen. So a change to
+ * llmdata.json or systemPrompt.txt shows on the next load, without restarting the game.
  */
 public class MoveByTextImpl extends BaseModPlugin {
 
+    /** The key that opens and closes the editor when "panelKey" doesn't name one. */
+    static final int DEFAULT_PANEL_KEY = Keyboard.KEY_F8;
+
+    private static final Logger LOG = Global.getLogger(MoveByTextImpl.class);
+
     /**
-     * One console for the whole run, so the backend and its worker thread outlive loading a save. Static because
-     * the editor panel and its script reach it through the static methods below.
+     * One console for the whole run, so a message on its way survives loading a save. Static because the editor
+     * panel and its script reach it through the static methods below.
      */
     private static CommandConsole console;
+    private static int panelKey = DEFAULT_PANEL_KEY;
 
     @Override
     public void onGameLoad(boolean newGame) {
+        GameNames names = readNames();
+        JSONObject cfg = Settings.load(names); // reads the files, so on the game thread
+        Backend backend = Provider.backendFor(cfg);
         if (console == null) {
-            console = new CommandConsole(Provider.load()); // reads the settings file, so on the game thread
+            console = new CommandConsole(backend);
         } else {
-            console.clearHistory(); // what was said in another save has nothing to do with this one
+            console.useBackend(backend); // a new backend starts with no history: another save, another conversation
         }
+        panelKey = keyFor(new Settings(cfg).text("panelKey"));
         Global.getSector().addTransientScript(new CampaignMultiLineScreenPlugin());
     }
 
-    /** The editor's Send button. */
-    public static void writeSubmittedTextToTerminal(String text) {
-        if (console != null) console.submit(text);
+    /** The mod factions and places of this game, for the prompt and the NLU providers' word lists. */
+    private static GameNames readNames() {
+        GameNames names;
+        try {
+            names = SectorNames.read();
+        } catch (RuntimeException e) {
+            LOG.warn("Could not read the factions and places of this game, using the vanilla ones only", e);
+            names = GameNames.NONE;
+        }
+        GameNames.install(names);
+        if (!names.factions().isEmpty()) {
+            LOG.info("Factions from other mods: " + String.join(", ", names.factions().keySet()));
+        }
+        return names;
+    }
+
+    /** An LWJGL key name ("F8", "insert"); DEFAULT_PANEL_KEY, with a warning, for a name LWJGL doesn't know. */
+    static int keyFor(String name) {
+        if (name == null) return DEFAULT_PANEL_KEY;
+        int key = Keyboard.getKeyIndex(name.trim().toUpperCase());
+        if (key != Keyboard.KEY_NONE) return key;
+        LOG.warn("Unknown panelKey \"" + name + "\" in " + Settings.FILE + ", using "
+                + Keyboard.getKeyName(DEFAULT_PANEL_KEY) + ". Use a key name such as F8, F9 or INSERT.");
+        return DEFAULT_PANEL_KEY;
+    }
+
+    /** The editor's Send button: false when nothing was sent (empty, or still waiting for the last answer). */
+    public static boolean submit(String text) {
+        return console != null && console.submit(text);
     }
 
     /** Every frame, from CampaignMultiLineScreenPlugin: the next reply, after carrying out its commands. */
-    public static String pollLlmReply() {
+    public static String pollReply() {
         return console != null ? console.pollReply() : null;
     }
 
-    public static void clearLlmHistory() {
+    /** The editor's "Forget chat" button. */
+    public static void clearHistory() {
         if (console != null) console.clearHistory();
+    }
+
+    /** Whether the answer to the last message is still awaited; the editor then refuses another one. */
+    public static boolean isBusy() {
+        return console != null && console.isBusy();
+    }
+
+    /** How long the answer has taken so far, in seconds. */
+    public static int waitingSeconds() {
+        return console != null ? console.waitingSeconds() : 0;
+    }
+
+    /** The editor's Cancel button: stop waiting, ignore the answer. */
+    public static void cancel() {
+        if (console != null) console.cancel();
+    }
+
+    /** Who answers, for the editor's waiting line. */
+    public static String modelName() {
+        return console != null ? console.modelName() : "?";
+    }
+
+    /** The key that opens and closes the editor, from "panelKey" in the settings. */
+    public static int panelKey() {
+        return panelKey;
+    }
+
+    /** What the panel keeps for the whole run: open or not, and the sent messages, across save loads. */
+    private static final PanelState PANEL_STATE = new PanelState();
+
+    /** The editor panel's link to the console: the static methods above, and the panel state of this run. */
+    private static final EditorHost HOST = new EditorHost() {
+        @Override public boolean submit(String message) { return MoveByTextImpl.submit(message); }
+        @Override public boolean isBusy() { return MoveByTextImpl.isBusy(); }
+        @Override public int waitingSeconds() { return MoveByTextImpl.waitingSeconds(); }
+        @Override public void cancel() { MoveByTextImpl.cancel(); }
+        @Override public String modelName() { return MoveByTextImpl.modelName(); }
+        @Override public void clearHistory() { MoveByTextImpl.clearHistory(); }
+        @Override public int panelKey() { return MoveByTextImpl.panelKey(); }
+        @Override public PanelState state() { return PANEL_STATE; }
+    };
+
+    /** For the editor panel, which CampaignMultiLineScreenPlugin makes on every game load. */
+    static EditorHost host() {
+        return HOST;
     }
 }

@@ -20,7 +20,7 @@ final class Sentence {
     private final JSONObject parse;
     private final String text;
     private String intent;
-    private final List<JSONObject> entities = new ArrayList<JSONObject>();
+    private final List<JSONObject> entities = new ArrayList<>();
 
     Sentence(JSONObject parse) throws Exception {
         this.parse = parse;

@@ -50,7 +50,9 @@ def parse_example(marked):
 def read(path):
     """Every example of a Rasa nlu.yml as an Example, in file order. Lookup tables and other blocks are skipped."""
     examples, intent = [], None
-    for line in open(path, encoding="utf-8").read().split("\n"):
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    for line in text.split("\n"):
         m = re.match(r"^- (\w+): (.+)$", line)
         if m:
             intent = m.group(2).strip() if m.group(1) == "intent" else None

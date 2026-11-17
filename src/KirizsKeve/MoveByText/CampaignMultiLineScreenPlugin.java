@@ -11,9 +11,13 @@ import org.apache.log4j.Logger;
 
 import rolflectionlib.util.RolfLectionUtil;
 
-import static KirizsKeve.MoveByText.MoveByTextImpl.pollLlmReply;
+import static KirizsKeve.MoveByText.MoveByTextImpl.pollReply;
 
 public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
+
+    /** Where the panel goes, from the top left corner of the screen; moved up and left on a screen too small for that. */
+    private static final float PANEL_X = 450f;
+    private static final float PANEL_Y = 450f;
 
     /** Adding the panel is tried on this many frames; after that something is really wrong and it gives up. */
     private static final int MAX_INJECT_ATTEMPTS = 5;
@@ -22,7 +26,6 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
 
     private boolean injected = false;
     private int failedAttempts = 0;
-    private MultiLineTextFieldPanel editorPanel;
 
     @Override
     public boolean isDone() {
@@ -38,7 +41,7 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
     public void advance(float amount) {
         // 1. Check if we are in the campaign state as per documentation
         if (Global.getSettings().getCurrentState() != GameState.CAMPAIGN) return;
-        pollLlmReply();
+        pollReply();
         // 2. Inject the panel from advance, once
         if (injected || failedAttempts >= MAX_INJECT_ATTEMPTS) return;
 
@@ -52,10 +55,12 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
             final UIPanelAPI screen = (UIPanelAPI) RolfLectionUtil.invokeMethodDirectly(getScreenPanelMethod, campaignState);
 
             // 4. Create the panel
-            editorPanel = new MultiLineTextFieldPanel();
+            MultiLineTextFieldPanel editorPanel = new MultiLineTextFieldPanel(MoveByTextImpl.host());
 
-            // 5. Inject into the root panel at the requested coordinates
-            screen.addComponent(editorPanel.getPanel()).inTL(450f, 450f);
+            // 5. Inject into the root panel
+            float x = Math.max(0f, Math.min(PANEL_X, Global.getSettings().getScreenWidth() - MultiLineTextFieldPanel.WIDTH));
+            float y = Math.max(0f, Math.min(PANEL_Y, Global.getSettings().getScreenHeight() - MultiLineTextFieldPanel.HEIGHT));
+            screen.addComponent(editorPanel.getPanel()).inTL(x, y);
 
             injected = true;
         } catch (Exception e) {

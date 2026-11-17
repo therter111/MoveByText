@@ -10,7 +10,6 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,7 +43,8 @@ public final class CommandBuilder {
     /** More copies of one fleet than this is almost certainly a misread number. */
     public static final int MAX_COUNT = 10;
 
-    private static final List<String> ENTITY_TYPES = Arrays.asList(
+    /** The entity types read here; the training data labels exactly these (ConsistencyTest checks it). */
+    static final List<String> ENTITY_TYPES = Arrays.asList(
             "faction", "size", "points", "destination", "origin", "target", "multiplier", "offset", "reference", "count");
 
     /** Intents the server is less sure about than this count as "not a request". */
@@ -64,7 +64,7 @@ public final class CommandBuilder {
      * - sentences with different requests, or with several fleets of their own, each give their own tags.
      */
     public String toTags(List<JSONObject> sentences) throws Exception {
-        List<JSONObject> requests = new ArrayList<JSONObject>();
+        List<JSONObject> requests = new ArrayList<>();
         for (JSONObject parse : sentences) {
             JSONObject intent = parse.optJSONObject("intent");
             String name = intent == null ? "" : intent.optString("name", "");
@@ -100,7 +100,7 @@ public final class CommandBuilder {
         double confidence = intent == null ? 0 : intent.optDouble("confidence", 0);
         if (name.isEmpty() || confidence < minConfidence) return NONE;
 
-        Set<String> intents = new HashSet<String>(Arrays.asList(name.split("\\+")));
+        Set<String> intents = new HashSet<>(Arrays.asList(name.split("\\+")));
         boolean wantsSpawn = intents.contains(SPAWN_INTENT);
         if (!wantsSpawn && !intents.contains(TRADE_INTENT) && !intents.contains(HELP_INTENT)) {
             return NONE; // out_of_scope, nlu_fallback or anything else
@@ -137,11 +137,11 @@ public final class CommandBuilder {
 
     /** One parse from several sentences about the same request: per entity type, the latest sentence's values. */
     private static JSONObject merge(List<JSONObject> requests) throws Exception {
-        Map<String, JSONArray> latest = new LinkedHashMap<String, JSONArray>();
+        Map<String, JSONArray> latest = new LinkedHashMap<>();
         for (int s = 0; s < requests.size(); s++) {
             JSONObject parse = requests.get(s);
             String text = parse.optString("text", "");
-            Map<String, JSONArray> mine = new LinkedHashMap<String, JSONArray>();
+            Map<String, JSONArray> mine = new LinkedHashMap<>();
             JSONArray entities = parse.optJSONArray("entities");
             for (int i = 0; entities != null && i < entities.length(); i++) {
                 JSONObject e = entities.getJSONObject(i);
@@ -172,19 +172,14 @@ public final class CommandBuilder {
     // ------------------------------------------------------------------------------------------
 
     private static List<Fleet> fleets(JSONArray entities, String text) throws Exception {
-        List<JSONObject> list = new ArrayList<JSONObject>();
+        List<JSONObject> list = new ArrayList<>();
         if (entities != null) {
             for (int i = 0; i < entities.length(); i++) list.add(entities.getJSONObject(i));
         }
-        Collections.sort(list, new Comparator<JSONObject>() {
-            @Override
-            public int compare(JSONObject a, JSONObject b) {
-                return a.optInt("start", 0) - b.optInt("start", 0);
-            }
-        });
+        list.sort((a, b) -> a.optInt("start", 0) - b.optInt("start", 0));
 
         Fleet shared = new Fleet();
-        Map<String, Fleet> groups = new LinkedHashMap<String, Fleet>();
+        Map<String, Fleet> groups = new LinkedHashMap<>();
         for (JSONObject e : list) {
             String type = e.optString("entity", "");
             if (!ENTITY_TYPES.contains(type)) continue;
@@ -203,7 +198,7 @@ public final class CommandBuilder {
         }
 
         if (groups.isEmpty()) return Collections.singletonList(shared);
-        List<Fleet> result = new ArrayList<Fleet>(groups.values());
+        List<Fleet> result = new ArrayList<>(groups.values());
         for (Fleet fleet : result) fleet.inherit(shared);
         return result;
     }
@@ -223,12 +218,12 @@ public final class CommandBuilder {
 
     /** Everything said about one fleet: entity type -> its values in message order. */
     private static final class Fleet {
-        final Map<String, List<String>> values = new LinkedHashMap<String, List<String>>();
+        final Map<String, List<String>> values = new LinkedHashMap<>();
 
         void add(String type, String value) {
             List<String> list = values.get(type);
             if (list == null) {
-                list = new ArrayList<String>();
+                list = new ArrayList<>();
                 values.put(type, list);
             }
             list.add(value);
@@ -238,7 +233,7 @@ public final class CommandBuilder {
         void inherit(Fleet shared) {
             for (Map.Entry<String, List<String>> e : shared.values.entrySet()) {
                 if (e.getKey().equals("count")) continue; // "two convoys, one to X, one to Y" is already two groups
-                if (!values.containsKey(e.getKey())) values.put(e.getKey(), new ArrayList<String>(e.getValue()));
+                if (!values.containsKey(e.getKey())) values.put(e.getKey(), new ArrayList<>(e.getValue()));
             }
         }
 
@@ -292,7 +287,7 @@ public final class CommandBuilder {
         /** Points first (two numbers are a range: its middle), then a size word, then the player's own fleet, then 100. */
         int points() {
             Double base = null;
-            List<Double> numbers = new ArrayList<Double>();
+            List<Double> numbers = new ArrayList<>();
             for (String p : all("points")) {
                 Double n = NumberWords.parse(p);
                 if (n != null) numbers.add(n);

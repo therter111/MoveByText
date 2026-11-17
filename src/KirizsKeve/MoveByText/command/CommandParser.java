@@ -14,7 +14,7 @@ public final class CommandParser {
     /** Every command in the text, in the order written. */
     public List<FleetCommand> parse(String text) {
         // By where each tag starts; two tags never start at the same place
-        TreeMap<Integer, FleetCommand> byPosition = new TreeMap<Integer, FleetCommand>();
+        TreeMap<Integer, FleetCommand> byPosition = new TreeMap<>();
 
         Matcher spawn = SpawnCommand.TAG.matcher(text);
         while (spawn.find()) byPosition.put(spawn.start(), SpawnCommand.from(spawn));
@@ -25,6 +25,6 @@ public final class CommandParser {
         Matcher help = HelpCommand.TAG.matcher(text);
         while (help.find()) byPosition.put(help.start(), HelpCommand.from(help));
 
-        return new ArrayList<FleetCommand>(byPosition.values());
+        return new ArrayList<>(byPosition.values());
     }
 }

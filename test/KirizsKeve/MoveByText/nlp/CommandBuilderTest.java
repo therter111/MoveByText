@@ -1,31 +1,27 @@
 package KirizsKeve.MoveByText.nlp;
 
+import KirizsKeve.MoveByText.TestSuite;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
+import static KirizsKeve.MoveByText.Check.*;
 
 /**
  * Offline tests for CommandBuilder and NumberWords: Rasa answers written by hand -> the command tags the game
  * runs. No Rasa server is needed. To see how well the trained model reads real sentences, set "provider": "rasa"
  * in llmdata.json and run LlmPromptTest.
  *
- * Run main() from IntelliJ. Pass a word to run only the tests whose name contains it. Exits with 1 on any failure.
+ * Run main() from IntelliJ, or every offline suite with AllOfflineTests. Pass a word to run only the tests whose name
+ * contains it. Exits with 1 on any failure.
  */
 public class CommandBuilderTest {
 
     private static final double MIN = 0.5;
 
-    private interface Test {
-        void run() throws Exception;
-    }
+    public static final TestSuite<Void> SUITE = TestSuite.plain("CommandBuilderTest");
 
-    private static final Map<String, Test> TESTS = new LinkedHashMap<>();
-
-    private static void test(String name, Test body) {
-        TESTS.put(name, body);
+    private static void test(String name, TestSuite.PlainTest body) {
+        SUITE.add(name, body);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -149,6 +145,40 @@ public class CommandBuilderTest {
             for (String f : new String[]{"Klingon", "Borg", "Zerg", "Empire", "Covenant", "Shadowyards"}) {
                 same(null, FactionNames.resolve(f), "faction " + show(f));
             }
+        });
+
+        test("factions: a faction from another mod resolves once the game's names are installed", () -> {
+            same(null, FactionNames.resolve("Shadowyards"), "before: not a faction");
+            withGame(shadowyards(), () -> {
+                same("shadow_industry", FactionNames.resolve("Shadowyards"), "display name");
+                same("shadow_industry", FactionNames.resolve("the Shadowyards Reconstruction Authority navy"), "inside a phrase");
+                same("shadow_industry", FactionNames.resolve("shadow industry"), "the id's own name");
+                same("<SPAWN:shadow_industry:150>", tags(parse("spawn_fleet", 0.9, e("faction", "Shadowyards"), e("size", "big"))),
+                        "a spawn command");
+                same(null, FactionNames.resolve("Shadowyardz"), "no typo matching for mod factions");
+            });
+            same(null, FactionNames.resolve("Shadowyards"), "after: gone again");
+        });
+
+        test("factions: a vanilla name still wins over a mod faction that uses it", () -> {
+            withGame(names(new String[]{"mod_pirates", "Space Pirates Guild", "Pirates", "Blackstar Union"}), () -> {
+                same("pirates", FactionNames.resolve("pirates"), "pirates");
+                same("pirates", FactionNames.resolve("Space Pirates Guild"), "contains a vanilla name: vanilla first");
+                same("pirates", FactionNames.resolve("mod pirates"), "so does its id's own name");
+                same("mod_pirates", FactionNames.resolve("the Blackstar Union"), "a name of its own still works");
+            });
+        });
+
+        test("places: a lower-case place of the running game counts as a place", () -> {
+            same("<TRADE:independent:100:askonia>", tags(parse("trade_convoy", 0.9, e("destination", "askonia"))), "vanilla");
+            same("<NONE>", tags(parse("trade_convoy", 0.9, e("destination", "new caledonia"))), "unknown lower case");
+            GameNames game = new GameNames(java.util.Collections.<String, java.util.List<String>>emptyMap(),
+                    new java.util.HashSet<>(java.util.Arrays.asList("New Caledonia")));
+            withGame(game, () -> {
+                same("<TRADE:independent:100:new caledonia>", tags(parse("trade_convoy", 0.9, e("destination", "new caledonia"))),
+                        "known in this game");
+                check(PlaceNames.isKnown("the New Caledonia system"), "isKnown");
+            });
         });
     }
 
@@ -331,24 +361,28 @@ public class CommandBuilderTest {
     // ------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
-        String filter = args.length > 0 ? args[0] : null;
-        int run = 0, failed = 0;
-        for (Map.Entry<String, Test> t : TESTS.entrySet()) {
-            if (filter != null && !t.getKey().contains(filter)) continue;
-            run++;
-            try {
-                t.getValue().run();
-                System.out.println("PASS   " + t.getKey());
-            } catch (Throwable e) {
-                failed++;
-                System.out.println("FAIL   " + t.getKey());
-                String detail = e instanceof AssertionError ? e.getMessage() : "unexpected " + e;
-                System.out.println("       " + String.valueOf(detail).replace("\n", "\n       "));
-            }
+        SUITE.main(args);
+    }
+
+    /** Runs body with names as the running game's names, and puts the vanilla-only NONE back after. */
+    private static void withGame(GameNames names, TestSuite.PlainTest body) throws Exception {
+        GameNames.install(names);
+        try {
+            body.run();
+        } finally {
+            GameNames.install(GameNames.NONE);
         }
-        System.out.println();
-        System.out.println((run - failed) + "/" + run + " passed");
-        System.exit(failed == 0 && run > 0 ? 0 : 1);
+    }
+
+    /** {id, name, name...} for each faction. */
+    private static GameNames names(String[]... factions) {
+        java.util.Map<String, java.util.List<String>> map = new java.util.LinkedHashMap<>();
+        for (String[] f : factions) map.put(f[0], java.util.Arrays.asList(f).subList(1, f.length));
+        return new GameNames(map, java.util.Collections.<String>emptySet());
+    }
+
+    private static GameNames shadowyards() {
+        return names(new String[]{"shadow_industry", "Shadowyards", "Shadowyards Reconstruction Authority"});
     }
 
     /** An entity: {type, text} or {type, text, group}. */
@@ -382,15 +416,5 @@ public class CommandBuilderTest {
         list.add(first);
         list.addAll(java.util.Arrays.asList(more));
         return new CommandBuilder(MIN).toTags(list);
-    }
-
-    private static void same(Object expected, Object actual, String what) {
-        if (!Objects.equals(expected, actual)) {
-            throw new AssertionError(what + "\nexpected: " + show(expected) + "\nactual:   " + show(actual));
-        }
-    }
-
-    private static String show(Object value) {
-        return value instanceof String ? "\"" + value + "\"" : String.valueOf(value);
     }
 }

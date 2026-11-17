@@ -56,14 +56,14 @@ abstract class SpacyRule {
 
     /** The names of ALL, in order. */
     static List<String> names() {
-        List<String> names = new ArrayList<String>();
+        List<String> names = new ArrayList<>();
         for (SpacyRule rule : ALL) names.add(rule.name());
         return names;
     }
 
     /** The rules with these names, in ALL order whatever order the names are in. */
     static List<SpacyRule> named(Set<String> names) {
-        List<SpacyRule> rules = new ArrayList<SpacyRule>();
+        List<SpacyRule> rules = new ArrayList<>();
         for (SpacyRule rule : ALL) {
             if (names.contains(rule.name())) rules.add(rule);
         }

@@ -12,8 +12,8 @@ import java.util.regex.Pattern;
 public final class NumberWords {
 
     private static final Pattern DIGITS = Pattern.compile("-?\\d[\\d,]*(\\.\\d+)?");
-    private static final Map<String, Integer> SMALL = new HashMap<String, Integer>();
-    private static final Map<String, Integer> TENS = new HashMap<String, Integer>();
+    private static final Map<String, Integer> SMALL = new HashMap<>();
+    private static final Map<String, Integer> TENS = new HashMap<>();
 
     static {
         String[] small = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",

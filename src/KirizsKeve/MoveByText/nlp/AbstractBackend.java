@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * What every backend shares: one background worker thread, and ask() running a request on it and handing the
@@ -17,12 +17,12 @@ import java.util.concurrent.ThreadFactory;
  * The callback runs on the worker thread, never on the game thread, so it must not touch Starsector objects.
  * Requests run one after another, in the order they were asked.
  */
-public abstract class AbstractBackend implements LlmBackend {
+public abstract class AbstractBackend implements Backend {
 
     private final Logger log = Global.getLogger(getClass());
 
     /** Names of required settings that are missing, in the order they were checked. */
-    private final List<String> missing = new ArrayList<String>();
+    private final List<String> missing = new ArrayList<>();
 
     /** How long to wait for an answer. */
     private volatile int readTimeoutMs;
@@ -32,13 +32,10 @@ public abstract class AbstractBackend implements LlmBackend {
     protected AbstractBackend(int readTimeoutMs) {
         this.readTimeoutMs = readTimeoutMs;
         final String threadName = "KirizsKeve-" + getClass().getSimpleName();
-        this.worker = Executors.newSingleThreadExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable runnable) {
-                Thread t = new Thread(runnable, threadName);
-                t.setDaemon(true); // never keep the game process alive
-                return t;
-            }
+        this.worker = Executors.newSingleThreadExecutor(runnable -> {
+            Thread t = new Thread(runnable, threadName);
+            t.setDaemon(true); // never keep the game process alive
+            return t;
         });
     }
 
@@ -78,9 +75,19 @@ public abstract class AbstractBackend implements LlmBackend {
         return log;
     }
 
-    /** Runs a task on the worker, after the requests asked before it. */
+    /** Runs a task on the worker, after the requests asked before it; nothing after close(). */
     protected final void onWorker(Runnable task) {
-        worker.submit(task);
+        try {
+            worker.submit(task);
+        } catch (RejectedExecutionException e) {
+            // closed: nothing left to do for this backend
+        }
+    }
+
+    /** Lets the running and queued requests finish, then ends the worker thread; ask() fails from now on. */
+    @Override
+    public void close() {
+        worker.shutdown();
     }
 
     @Override
@@ -95,9 +102,8 @@ public abstract class AbstractBackend implements LlmBackend {
             return;
         }
 
-        worker.submit(new Runnable() {
-            @Override
-            public void run() {
+        try {
+            worker.submit(() -> {
                 String reply = null;
                 String error = null;
                 try {
@@ -113,8 +119,10 @@ public abstract class AbstractBackend implements LlmBackend {
                 } else {
                     callback.onResponse(reply);
                 }
-            }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            callback.onError(displayName() + " was closed (the settings were reloaded). Send the message again.");
+        }
     }
 
     /** Blocking request that records no history. For tests only - never call this from the game thread. */

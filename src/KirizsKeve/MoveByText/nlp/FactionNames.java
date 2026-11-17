@@ -2,20 +2,24 @@ package KirizsKeve.MoveByText.nlp;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Faction names, nicknames, leaders, units and home worlds -> one of the 11 faction ids the game knows. The same
- * names are in the training templates (nlp/rasa/generate_nlu.py); add new ones in both places.
+ * Faction names, nicknames, leaders, units and home worlds -> one of the 11 vanilla faction ids. The same names are in
+ * the training templates (nlp/rasa/generate_nlu.py); add new ones in both places. Factions from other mods come from
+ * the running game (GameNames) and are only tried when no vanilla name matches.
  */
 public final class FactionNames {
 
-    private static final Map<String, String> ALIASES = new LinkedHashMap<String, String>();
+    private static final Map<String, String> ALIASES = new LinkedHashMap<>();
     /** Longest aliases first, so "luddic church" wins over "luddic" and "remnant drones" over "drones". */
     private static final List<String> BY_LENGTH;
+    /** The 11 vanilla ids, in the order above. */
+    private static final Set<String> IDS;
 
     static {
         alias("remnants", "remnant", "remnants", "ordo", "ordos", "nexus", "thinking machines", "rogue ai",
@@ -37,14 +41,10 @@ public final class FactionNames {
                 "automated ships", "domain drones");
         alias("omega", "omega");
 
-        List<String> keys = new ArrayList<String>(ALIASES.keySet());
-        Collections.sort(keys, new Comparator<String>() {
-            @Override
-            public int compare(String a, String b) {
-                return b.length() - a.length();
-            }
-        });
+        List<String> keys = new ArrayList<>(ALIASES.keySet());
+        keys.sort((a, b) -> b.length() - a.length());
         BY_LENGTH = keys;
+        IDS = Collections.unmodifiableSet(new LinkedHashSet<>(ALIASES.values()));
     }
 
     private static void alias(String id, String... names) {
@@ -54,7 +54,20 @@ public final class FactionNames {
     private FactionNames() {
     }
 
-    /** The faction id for a name, or null when it isn't a faction of the game. */
+    /** The vanilla faction ids: "remnants", "pirates", ... "omega". */
+    public static Set<String> ids() {
+        return IDS;
+    }
+
+    /** True when the normalized name (see normalize()) is one of the vanilla factions' names. */
+    static boolean isVanillaAlias(String normalized) {
+        return ALIASES.containsKey(normalized);
+    }
+
+    /**
+     * The faction id for a name, or null when it isn't a faction of the game. Vanilla names win, typos of them
+     * included; then the names of factions from other mods (GameNames), exact or inside a longer phrase.
+     */
     public static String resolve(String name) {
         String n = normalize(name);
         if (n.isEmpty()) return null;
@@ -76,7 +89,7 @@ public final class FactionNames {
                 if (distance(word, alias) <= allowed) return ALIASES.get(alias);
             }
         }
-        return null;
+        return GameNames.current().factionFor(n);
     }
 
     /** Lower case, letters and digits only, single spaces: "Kanta's Den" -> "kanta s den". */

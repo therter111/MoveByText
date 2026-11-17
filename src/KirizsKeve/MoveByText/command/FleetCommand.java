@@ -45,10 +45,13 @@ public abstract class FleetCommand {
     /** Finds the places, spawns the fleet and reports what happened. Game thread only. */
     public abstract void execute(PlaceFinder places, FleetSpawner fleets);
 
-    /** A spawn that threw: reported, so one bad command doesn't stop the others. */
+    /**
+     * A spawn that threw: reported, so one bad command doesn't stop the others. The stack trace goes to the game's
+     * log (starsector.log), where printStackTrace's stderr doesn't end up.
+     */
     protected final void crashed(Exception e) {
         LOG.fail(kind() + " crashed: " + e);
-        e.printStackTrace();
+        Global.getLogger(getClass()).error(kind() + " crashed", e);
     }
 
     /**

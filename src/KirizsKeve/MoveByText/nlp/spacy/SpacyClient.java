@@ -63,19 +63,19 @@ public class SpacyClient extends NluServerClient {
 
     /** A JSON list of names, "all", "none" or "a,b"; anything missing or unreadable gives DEFAULT_RULES. */
     public static Set<String> readRules(Object value) {
-        List<String> names = new ArrayList<String>();
+        List<String> names = new ArrayList<>();
         if (value instanceof JSONArray) {
             JSONArray list = (JSONArray) value;
             for (int i = 0; i < list.length(); i++) names.add(list.optString(i, ""));
         } else if (value instanceof String) {
             String s = ((String) value).trim().toLowerCase();
-            if (s.equals("all")) return new LinkedHashSet<String>(ALL_RULES);
-            if (s.equals("none")) return new LinkedHashSet<String>();
+            if (s.equals("all")) return new LinkedHashSet<>(ALL_RULES);
+            if (s.equals("none")) return new LinkedHashSet<>();
             names.addAll(Arrays.asList(s.split("\\s*,\\s*")));
         } else {
-            return new LinkedHashSet<String>(DEFAULT_RULES);
+            return new LinkedHashSet<>(DEFAULT_RULES);
         }
-        Set<String> out = new LinkedHashSet<String>();
+        Set<String> out = new LinkedHashSet<>();
         for (String n : names) {
             String name = n.trim().toLowerCase();
             if (name.isEmpty()) continue;

@@ -1,8 +1,10 @@
 package KirizsKeve.MoveByText;
 
 import KirizsKeve.MoveByText.nlp.AbstractBackend;
-import KirizsKeve.MoveByText.nlp.LlmBackend;
+import KirizsKeve.MoveByText.nlp.Backend;
+import KirizsKeve.MoveByText.nlp.GameNames;
 import KirizsKeve.MoveByText.nlp.Provider;
+import KirizsKeve.MoveByText.nlp.SystemPrompt;
 import org.json.JSONObject;
 
 import java.net.SocketTimeoutException;
@@ -18,7 +20,7 @@ import java.util.regex.Pattern;
 
 /**
  * Live test of the LLM part only: sends player sentences to the model picked by "provider" in llmdata.json
- * (Gemini, KoboldCpp running e.g. a local Qwen, or a Rasa or spaCy NLU server, which ignore the prompt) with the real system prompt from data/config/llmdata.json and checks the command tags that come back. Nothing in the game is touched.
+ * (Gemini, KoboldCpp running e.g. a local Qwen, or a Rasa or spaCy NLU server, which ignore the prompt) with the real system prompt from data/config/systemPrompt.txt and checks the command tags that come back. Nothing in the game is touched.
  *
  * A reply passes when the game would do the same with it as with an expected reply, so it is as lenient as
  * MoveByTextImpl: tags in any order (the fleets are independent of each other), place names in any
@@ -63,7 +65,7 @@ public class LlmPromptTest {
             "(<SPAWN:[a-z_]+:\\d+>|<TRADE:[a-z_]+:\\d+:[^:>]+(:[^:>]+)?>|<HELP:[a-z_]+:\\d+:[^:>]+>)+|<NONE>";
     private static final Pattern TAG = Pattern.compile("<([^<>]+)>");
 
-    private static class Case {
+    static final class Case {
         final String group;
         final String input;
         final String[] accepted;
@@ -76,6 +78,11 @@ public class LlmPromptTest {
     }
 
     private static final List<Case> CASES = new ArrayList<Case>();
+
+    /** Every case of the three sets, in order; ProjectFilesTest checks them offline. */
+    static List<Case> cases() {
+        return Collections.unmodifiableList(CASES);
+    }
     private static String group = "";
 
     static void group(String name) {
@@ -266,7 +273,7 @@ public class LlmPromptTest {
         Path config = Paths.get(configPath);
         JSONObject cfg = readConfig(config);
         Provider provider = Provider.of(cfg);
-        LlmBackend llm = provider.create(cfg);
+        Backend llm = provider.create(cfg);
         if (provider == Provider.GEMINI) ((AbstractBackend) llm).setReadTimeoutMs(READ_TIMEOUT_MS); // the others: their timeoutSeconds
         rateLimited = provider == Provider.GEMINI; // local servers have no rate limit
         if (!llm.isConfigured()) {
@@ -287,7 +294,7 @@ public class LlmPromptTest {
         String providerName = provider == Provider.GEMINI ? null : provider.id();
         LlmTestReport report = new LlmTestReport(LOG_DIR, providerName, modelLabel(llm), cfg.optString("systemPrompt", ""),
                 filter, groupOfEachCase, CASES.size());
-        System.out.println("Writing the results to " + report.file().toAbsolutePath());
+        System.out.println(reportLine(report.file().toAbsolutePath().toString()));
 
         int passed = 0;
         List<String> problems = new ArrayList<String>();
@@ -296,7 +303,7 @@ public class LlmPromptTest {
             if (!c.group.equals(currentGroup)) {
                 currentGroup = c.group;
                 System.out.println();
-                System.out.println("== " + currentGroup + " ==");
+                System.out.println(groupLine(currentGroup));
             }
 
             String first;
@@ -305,31 +312,29 @@ public class LlmPromptTest {
                 first = ask(llm, c.input);
                 if (passes(c, first)) {
                     passed++;
-                    System.out.println("PASS   " + quote(c.input) + " -> " + oneLine(first));
+                    System.out.println(passLine(c.input, first));
                     report.pass(c.group, c.input, first);
                     continue;
                 }
                 second = ask(llm, c.input);
             } catch (Exception e) {
-                problems.add("ERROR  " + quote(c.input));
-                System.out.println("ERROR  " + quote(c.input) + "\n       " + e);
+                problems.add(errorLine(c.input));
+                System.out.println(errorLine(c.input) + "\n       " + e);
                 report.error(c.group, c.input, e);
                 continue;
             }
 
             report.retried(c.group, c.input, passes(c, second), first, second, c.accepted);
-            String label = passes(c, second) ? "FLAKY" : "FAIL ";
-            problems.add(label + "  " + quote(c.input));
-            System.out.println(label + "  " + quote(c.input));
-            System.out.println("       1st:      " + oneLine(first) + (canonical(first) == null ? "   (not only command tags)" : ""));
-            System.out.println("       2nd:      " + oneLine(second) + (canonical(second) == null ? "   (not only command tags)" : ""));
-            System.out.println("       expected: " + String.join("  or  ", c.accepted));
+            boolean flaky = passes(c, second);
+            problems.add(retryLine(flaky, c.input));
+            System.out.println(retryLine(flaky, c.input));
+            System.out.println(retryDetails(first, second, c.accepted));
         }
 
         report.finish();
         System.out.println();
-        System.out.println("== summary ==");
-        System.out.println(passed + "/" + cases.size() + " passed");
+        System.out.println(groupLine("summary"));
+        System.out.println(summaryLine(passed, cases.size()));
         for (String p : problems) System.out.println(p);
         System.out.println();
         System.out.println("Full results: " + report.file().toAbsolutePath());
@@ -377,7 +382,7 @@ public class LlmPromptTest {
      * For the log file. KoboldCpp, Rasa and spaCy are asked which model they have loaded, so runs with different
      * quants or different training runs can be told apart.
      */
-    private static String modelLabel(LlmBackend llm) {
+    private static String modelLabel(Backend llm) {
         try {
             return llm.loadedModel();
         } catch (Exception e) {
@@ -387,7 +392,7 @@ public class LlmPromptTest {
     }
 
     /** Retries rate limits, overload and timeouts, which the free tier hits often. */
-    private static String ask(LlmBackend llm, String input) throws Exception {
+    private static String ask(Backend llm, String input) throws Exception {
         for (int retry = 0; ; retry++) {
             pace();
             try {
@@ -428,13 +433,65 @@ public class LlmPromptTest {
         requestsSent++;
     }
 
-    /** llmdata.json has '#' comment lines, which plain org.json may not accept, so drop them first. */
+    /**
+     * A settings file as the game reads it: llmdata.json without its '#' comment lines (plain org.json may not accept
+     * them), with "systemPrompt" filled in the way Settings.load() does it in the game, for a game without mod
+     * factions. The prompt file is systemPrompt.txt next to the settings file, else data/config/systemPrompt.txt in
+     * the working directory (the mod folder), e.g. for the temporary settings files of nlp/rasa/test_handwritten.py.
+     */
     public static JSONObject readConfig(Path path) throws Exception {
         StringBuilder sb = new StringBuilder();
         for (String line : Files.readAllLines(path, StandardCharsets.UTF_8)) {
             if (!line.trim().startsWith("#")) sb.append(line).append('\n');
         }
-        return new JSONObject(sb.toString());
+        JSONObject cfg = new JSONObject(sb.toString());
+
+        Path promptFile = path.resolveSibling("systemPrompt.txt");
+        if (!Files.exists(promptFile)) promptFile = Paths.get(SystemPrompt.FILE);
+        String prompt = Files.exists(promptFile) ? new String(Files.readAllBytes(promptFile), StandardCharsets.UTF_8) : null;
+        return SystemPrompt.withPrompt(cfg, prompt, GameNames.NONE);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // The console lines. nlp/rasa/test_handwritten.py (parse_console, summary_counts, report_path) and
+    // nlp/spacy/compare_runs.py (console_cases) read them back; ProjectFilesTest checks that they still can.
+    // ------------------------------------------------------------------------------------------
+
+    /** "== size words ==": the cases below it are in this group; "== summary ==" starts the summary. */
+    static String groupLine(String group) {
+        return "== " + group + " ==";
+    }
+
+    /** "PASS   "input" -> reply" for a case right the first time. */
+    static String passLine(String input, String reply) {
+        return "PASS   " + quote(input) + " -> " + oneLine(reply);
+    }
+
+    /** "ERROR  "input"" for a case the provider couldn't answer; the error follows on the next line. */
+    static String errorLine(String input) {
+        return "ERROR  " + quote(input);
+    }
+
+    /** "FLAKY  "input"" (right the second time) or "FAIL   "input"" (wrong twice). */
+    static String retryLine(boolean flaky, String input) {
+        return (flaky ? "FLAKY" : "FAIL ") + "  " + quote(input);
+    }
+
+    /** The lines under a retryLine: both replies and what was expected. */
+    static String retryDetails(String first, String second, String[] accepted) {
+        return "       1st:      " + oneLine(first) + (canonical(first) == null ? "   (not only command tags)" : "") + "\n"
+                + "       2nd:      " + oneLine(second) + (canonical(second) == null ? "   (not only command tags)" : "") + "\n"
+                + "       expected: " + String.join("  or  ", accepted);
+    }
+
+    /** "629/650 passed", right under "== summary ==". */
+    static String summaryLine(int passed, int total) {
+        return passed + "/" + total + " passed";
+    }
+
+    /** Where the readable log is written; test_handwritten.py moves it next to its other outputs. */
+    static String reportLine(String path) {
+        return "Writing the results to " + path;
     }
 
     private static String quote(String input) {

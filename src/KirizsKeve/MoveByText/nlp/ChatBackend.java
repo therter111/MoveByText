@@ -35,11 +35,6 @@ public abstract class ChatBackend extends AbstractBackend {
     /** Forgets the conversation, after the requests asked before it. */
     @Override
     public final void clearHistory() {
-        onWorker(new Runnable() {
-            @Override
-            public void run() {
-                history.clear();
-            }
-        });
+        onWorker(history::clear);
     }
 }

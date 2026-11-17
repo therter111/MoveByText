@@ -17,7 +17,7 @@ final class SplitRule extends SpacyRule {
 
     @Override
     List<String> pieces(List<String> sentences, int max) {
-        List<String> out = new ArrayList<String>();
+        List<String> out = new ArrayList<>();
         for (String sentence : sentences) {
             for (String piece : SECOND_COMMAND.split(sentence)) {
                 String p = piece.trim();

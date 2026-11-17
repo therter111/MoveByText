@@ -1,12 +1,11 @@
 package KirizsKeve.MoveByText.nlp.gemini;
 
 import KirizsKeve.MoveByText.LlmPromptTest;
-import KirizsKeve.MoveByText.nlp.LlmBackend;
+import KirizsKeve.MoveByText.TestSuite;
+import KirizsKeve.MoveByText.nlp.Backend;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.varia.NullAppender;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -25,10 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.TreeSet;
 import java.util.concurrent.BlockingQueue;
@@ -38,6 +34,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static KirizsKeve.MoveByText.Check.*;
 
 /**
  * Offline tests for GeminiClient: reading the settings, the HTTP request it builds, how it reads Gemini's
@@ -66,14 +64,10 @@ public class GeminiClientTest {
     /** How long to wait for a request or callback that should come, before calling it a failure. */
     private static final long WAIT_MS = 10000;
 
-    private interface Test {
-        void run(FakeGemini gemini) throws Exception;
-    }
+    public static final TestSuite<FakeGemini> SUITE = new TestSuite<>("GeminiClientTest", FakeGemini::new, FakeGemini::stop);
 
-    private static final Map<String, Test> TESTS = new LinkedHashMap<>();
-
-    private static void test(String name, Test body) {
-        TESTS.put(name, body);
+    private static void test(String name, TestSuite.Test<FakeGemini> body) {
+        SUITE.add(name, body);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -537,7 +531,7 @@ public class GeminiClientTest {
 
         test("ask: a callback that throws doesn't stop later requests", g -> {
             GeminiClient llm = client(g);
-            llm.ask("first", new LlmBackend.Callback() {
+            llm.ask("first", new Backend.Callback() {
                 @Override
                 public void onResponse(String text) {
                     throw new RuntimeException("callback blew up");
@@ -652,38 +646,7 @@ public class GeminiClientTest {
     // ------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
-        BasicConfigurator.configure(new NullAppender()); // GeminiClient logs every request; keep the output to results
-        String filter = args.length > 0 ? args[0] : null;
-
-        int run = 0, failed = 0;
-        long allStart = System.nanoTime();
-        for (Map.Entry<String, Test> t : TESTS.entrySet()) {
-            if (filter != null && !t.getKey().contains(filter)) continue;
-            run++;
-            long start = System.nanoTime();
-            FakeGemini gemini = null;
-            try {
-                gemini = new FakeGemini();
-                t.getValue().run(gemini);
-                System.out.println("PASS   " + t.getKey() + "  (" + (System.nanoTime() - start) / 1000000 + " ms)");
-            } catch (Throwable e) {
-                failed++;
-                System.out.println("FAIL   " + t.getKey());
-                String detail = e instanceof AssertionError ? e.getMessage() : "unexpected " + e;
-                System.out.println("       " + String.valueOf(detail).replace("\n", "\n       "));
-                if (!(e instanceof AssertionError)) {
-                    for (StackTraceElement frame : e.getStackTrace()) {
-                        if (frame.getClassName().startsWith("KirizsKeve")) System.out.println("         at " + frame);
-                    }
-                }
-            } finally {
-                if (gemini != null) gemini.stop();
-            }
-        }
-
-        System.out.println();
-        System.out.println((run - failed) + "/" + run + " passed in " + (System.nanoTime() - allStart) / 1000000 + " ms");
-        System.exit(failed == 0 && run > 0 ? 0 : 1);
+        SUITE.main(args);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -826,7 +789,7 @@ public class GeminiClientTest {
     }
 
     /** Collects callbacks with the thread each one ran on. */
-    private static class Calls implements LlmBackend.Callback {
+    private static class Calls implements Backend.Callback {
         static class Call {
             final boolean ok;
             final String text;
@@ -989,47 +952,5 @@ public class GeminiClientTest {
             return i;
         }
         return -1;
-    }
-
-    // ------------------------------------------------------------------------------------------
-    // Assertions
-    // ------------------------------------------------------------------------------------------
-
-    private interface Code {
-        void run() throws Exception;
-    }
-
-    private static void check(boolean condition, String message) {
-        if (!condition) throw new AssertionError(message);
-    }
-
-    private static void same(Object expected, Object actual, String what) {
-        if (!Objects.equals(expected, actual)) {
-            throw new AssertionError(what + "\nexpected: " + show(expected) + "\nactual:   " + show(actual));
-        }
-    }
-
-    private static void has(String text, String part, String what) {
-        if (text == null || !text.contains(part)) {
-            throw new AssertionError(what + " should contain " + show(part) + "\nactual: " + show(text));
-        }
-    }
-
-    /** Runs code that must throw, and returns what it threw. */
-    private static Throwable fails(Code code, String what) {
-        try {
-            code.run();
-        } catch (Throwable e) {
-            return e;
-        }
-        throw new AssertionError(what + ": expected an exception, but it returned normally");
-    }
-
-    /** Readable form for failure messages: strings quoted with escapes visible, long ones cut short. */
-    private static String show(Object value) {
-        if (!(value instanceof String)) return String.valueOf(value);
-        String s = ((String) value).replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
-        if (s.length() > 300) s = s.substring(0, 300) + "... (" + ((String) value).length() + " chars)";
-        return "\"" + s + "\"";
     }
 }

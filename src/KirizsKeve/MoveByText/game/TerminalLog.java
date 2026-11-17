@@ -10,6 +10,18 @@ import org.apache.log4j.Logger;
  */
 public final class TerminalLog {
 
+    /** Gets every message the player should see, as it is shown; the mod's own panel lists them. */
+    public interface ScreenListener {
+        void shown(String message, boolean failed);
+    }
+
+    /** At most one: the panel of the campaign that is running. Game thread only. */
+    private static ScreenListener screenListener;
+
+    public static void setScreenListener(ScreenListener listener) {
+        screenListener = listener;
+    }
+
     private final String topic;
     private final Logger logger;
 
@@ -40,6 +52,7 @@ public final class TerminalLog {
     /** Does nothing outside a running campaign (the offline tests, the title screen). */
     private static void onScreen(String message, boolean failed) {
         try {
+            if (screenListener != null) screenListener.shown(message, failed);
             if (Global.getSector() == null || Global.getSector().getCampaignUI() == null) return;
             if (failed) {
                 Global.getSector().getCampaignUI().addMessage(message, Misc.getNegativeHighlightColor());

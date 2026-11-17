@@ -4,11 +4,14 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-/** Place names as the NLU models mark them, cleaned up for the game's place lookup. */
+/**
+ * Place names as the NLU models mark them, cleaned up for the game's place lookup. A name counts as known when it is
+ * a vanilla system or market, or a place of the running game (GameNames), e.g. one added by another mod.
+ */
 public final class PlaceNames {
 
     /** Vanilla Starsector systems and markets, lowercase, for accepting names the player didn't capitalize. */
-    private static final Set<String> KNOWN = new HashSet<String>(Arrays.asList(
+    private static final Set<String> KNOWN = new HashSet<>(Arrays.asList(
             "jangala", "asharu", "corvus", "askonia", "sindria", "volturn", "chicomoztoc", "aztlan", "kazeron",
             "fikenhild", "mazalot", "hybrasil", "culann", "eochu bres", "port tse", "eventide", "ilm", "tigra city",
             "agreus", "gilead", "hesperus", "kanta's den", "magec", "new maxios", "mairaath", "salamanca", "nortia",
@@ -22,7 +25,7 @@ public final class PlaceNames {
     /**
      * A place name as the game's place lookup wants it: no ':' or '>', no "the" in front, no "system" after it.
      * Null for an all-lowercase word that isn't a known place: the model sometimes marks ordinary words
-     * ("seizures", "drop") as places, while real names are capitalized or on the list.
+     * ("seizures", "drop") as places, while real names are capitalized or known.
      */
     static String clean(String name) {
         if (name == null) return null;
@@ -32,13 +35,17 @@ public final class PlaceNames {
         s = s.replaceAll("(?i)\\s+(star\\s+)?system$", "");
         s = s.replaceAll("\\s+", " ").trim();
         if (s.isEmpty()) return null;
-        if (s.equals(s.toLowerCase()) && !KNOWN.contains(s)) return null;
+        if (s.equals(s.toLowerCase()) && !known(s)) return null;
         return s;
     }
 
-    /** True for a vanilla Starsector system or market ("Jangala", "the Askonia system"). */
+    /** True for a vanilla or running-game system or market ("Jangala", "the Askonia system"). */
     public static boolean isKnown(String name) {
         String p = clean(name);
-        return p != null && KNOWN.contains(p.toLowerCase());
+        return p != null && known(p.toLowerCase());
+    }
+
+    private static boolean known(String lowerCase) {
+        return KNOWN.contains(lowerCase) || GameNames.current().hasPlace(lowerCase);
     }
 }

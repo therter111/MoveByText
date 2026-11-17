@@ -1,6 +1,7 @@
 package KirizsKeve.MoveByText.nlp;
 
 import com.fs.starfarer.api.Global;
+import org.apache.log4j.Logger;
 import org.json.JSONObject;
 
 /**
@@ -11,6 +12,8 @@ public final class Settings {
 
     /** Every setting is read from this file (relative to the mod folder). */
     public static final String FILE = "data/config/llmdata.json";
+    /** The id in mod_info.json, so the prompt file is read from this mod even if another one has the same path. */
+    public static final String MOD_ID = "KirizsKeve_MoveByText";
 
     private final JSONObject json;
 
@@ -19,13 +22,51 @@ public final class Settings {
         this.json = json != null ? json : new JSONObject();
     }
 
-    /** The settings file, or an empty object when it can't be read. Call on the game thread. */
+    /** The settings for a game without mod factions. See load(GameNames). */
     public static JSONObject load() {
+        return load(GameNames.NONE);
+    }
+
+    /**
+     * The settings file, with "systemPrompt" filled in from data/config/systemPrompt.txt (unless the file sets its
+     * own) and the mod factions of names put into it. An empty object when the settings can't be read. Reads both
+     * files fresh, so a change shows on the next game load. Call on the game thread.
+     */
+    public static JSONObject load(GameNames names) {
+        Logger log = Global.getLogger(Settings.class);
+        JSONObject cfg;
         try {
-            return Global.getSettings().loadJSON(FILE);
+            cfg = Global.getSettings().loadJSON(FILE);
         } catch (Exception e) {
-            Global.getLogger(Settings.class).warn("Could not read " + FILE + ": " + e.getMessage());
-            return new JSONObject();
+            log.warn("Could not read " + FILE + ": " + e.getMessage());
+            cfg = new JSONObject();
+        }
+
+        String prompt = null;
+        if (SystemPrompt.overridden(cfg)) {
+            log.info("Using the systemPrompt in " + FILE + " instead of " + SystemPrompt.FILE);
+        } else {
+            prompt = loadPromptFile(log);
+        }
+        try {
+            return SystemPrompt.withPrompt(cfg, prompt, names);
+        } catch (Exception e) {
+            log.warn("Could not fill in the system prompt: " + e.getMessage());
+            return cfg;
+        }
+    }
+
+    /** The prompt file's text, or null when it can't be read (the backend then reports systemPrompt as missing). */
+    private static String loadPromptFile(Logger log) {
+        try {
+            return Global.getSettings().loadText(SystemPrompt.FILE, MOD_ID);
+        } catch (Exception e) {
+            try {
+                return Global.getSettings().loadText(SystemPrompt.FILE);
+            } catch (Exception again) {
+                log.warn("Could not read " + SystemPrompt.FILE + ": " + again.getMessage());
+                return null;
+            }
         }
     }
 

@@ -32,7 +32,8 @@ prompt. KoboldCpp and the model file are not in this repo; download them on the 
    `THAT-PC-NAME` is the PC's Tailscale name, or its `100.x.y.z` address.
 2. Copy `data/config/llmdata.json.example` to `data/config/llmdata.json` (git ignores the copy), keep
    `"provider": "koboldcpp"` and set `"url"` in the `koboldcpp` block to `http://THAT-PC-NAME:5001`.
-3. Rebuild the jar. Running "Run Starsector" from IntelliJ does this automatically.
+3. Rebuild the jar: `python build.py` in the mod folder, or "Run Starsector" from IntelliJ, which does it
+   automatically.
 4. Optional: run `LlmPromptTest` to see how well the model follows the prompt. It writes
    `test/logs/llm-prompt-test_koboldcpp_<date>.log`, including the name of the loaded model file.
 

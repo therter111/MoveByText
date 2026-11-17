@@ -1,13 +1,12 @@
 package KirizsKeve.MoveByText.nlp.koboldcpp;
 
 import KirizsKeve.MoveByText.LlmPromptTest;
-import KirizsKeve.MoveByText.nlp.LlmBackend;
+import KirizsKeve.MoveByText.TestSuite;
+import KirizsKeve.MoveByText.nlp.Backend;
 import KirizsKeve.MoveByText.nlp.Provider;
 import KirizsKeve.MoveByText.nlp.gemini.GeminiClient;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.varia.NullAppender;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -24,10 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.TreeSet;
 import java.util.concurrent.BlockingQueue;
@@ -39,6 +35,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static KirizsKeve.MoveByText.Check.*;
 
 /**
  * Offline tests for KoboldCppClient and for Provider picking a backend: the settings, the ChatML prompt
@@ -65,14 +63,10 @@ public class KoboldCppClientTest {
 
     private static final long WAIT_MS = 10000;
 
-    private interface Test {
-        void run(FakeKobold kobold) throws Exception;
-    }
+    public static final TestSuite<FakeKobold> SUITE = new TestSuite<>("KoboldCppClientTest", FakeKobold::new, FakeKobold::stop);
 
-    private static final Map<String, Test> TESTS = new LinkedHashMap<>();
-
-    private static void test(String name, Test body) {
-        TESTS.put(name, body);
+    private static void test(String name, TestSuite.Test<FakeKobold> body) {
+        SUITE.add(name, body);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -99,7 +93,7 @@ public class KoboldCppClientTest {
 
         test("provider: the shipped llmdata.json.example picks a complete KoboldCpp setup", g -> {
             JSONObject example = LlmPromptTest.readConfig(Paths.get(EXAMPLE_CONFIG));
-            LlmBackend llm = Provider.backendFor(example);
+            Backend llm = Provider.backendFor(example);
             check(llm instanceof KoboldCppClient, "the example should pick KoboldCpp, got " + llm.getClass().getSimpleName());
             check(llm.isConfigured(), "the example's koboldcpp block should have every required setting");
 
@@ -496,38 +490,7 @@ public class KoboldCppClientTest {
     // ------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
-        BasicConfigurator.configure(new NullAppender()); // the client logs every request; keep the output to results
-        String filter = args.length > 0 ? args[0] : null;
-
-        int run = 0, failed = 0;
-        long allStart = System.nanoTime();
-        for (Map.Entry<String, Test> t : TESTS.entrySet()) {
-            if (filter != null && !t.getKey().contains(filter)) continue;
-            run++;
-            long start = System.nanoTime();
-            FakeKobold kobold = null;
-            try {
-                kobold = new FakeKobold();
-                t.getValue().run(kobold);
-                System.out.println("PASS   " + t.getKey() + "  (" + (System.nanoTime() - start) / 1000000 + " ms)");
-            } catch (Throwable e) {
-                failed++;
-                System.out.println("FAIL   " + t.getKey());
-                String detail = e instanceof AssertionError ? e.getMessage() : "unexpected " + e;
-                System.out.println("       " + String.valueOf(detail).replace("\n", "\n       "));
-                if (!(e instanceof AssertionError)) {
-                    for (StackTraceElement frame : e.getStackTrace()) {
-                        if (frame.getClassName().startsWith("KirizsKeve")) System.out.println("         at " + frame);
-                    }
-                }
-            } finally {
-                if (kobold != null) kobold.stop();
-            }
-        }
-
-        System.out.println();
-        System.out.println((run - failed) + "/" + run + " passed in " + (System.nanoTime() - allStart) / 1000000 + " ms");
-        System.exit(failed == 0 && run > 0 ? 0 : 1);
+        SUITE.main(args);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -660,7 +623,7 @@ public class KoboldCppClientTest {
         }
     }
 
-    private static class Calls implements LlmBackend.Callback {
+    private static class Calls implements Backend.Callback {
         static class Call {
             final boolean ok;
             final String text;
@@ -772,45 +735,5 @@ public class KoboldCppClientTest {
         TreeSet<String> keys = new TreeSet<>();
         for (Iterator<?> it = json.keys(); it.hasNext(); ) keys.add(String.valueOf(it.next()));
         return keys;
-    }
-
-    // ------------------------------------------------------------------------------------------
-    // Assertions
-    // ------------------------------------------------------------------------------------------
-
-    private interface Code {
-        void run() throws Exception;
-    }
-
-    private static void check(boolean condition, String message) {
-        if (!condition) throw new AssertionError(message);
-    }
-
-    private static void same(Object expected, Object actual, String what) {
-        if (!Objects.equals(expected, actual)) {
-            throw new AssertionError(what + "\nexpected: " + show(expected) + "\nactual:   " + show(actual));
-        }
-    }
-
-    private static void has(String text, String part, String what) {
-        if (text == null || !text.contains(part)) {
-            throw new AssertionError(what + " should contain " + show(part) + "\nactual: " + show(text));
-        }
-    }
-
-    private static Throwable fails(Code code, String what) {
-        try {
-            code.run();
-        } catch (Throwable e) {
-            return e;
-        }
-        throw new AssertionError(what + ": expected an exception, but it returned normally");
-    }
-
-    private static String show(Object value) {
-        if (!(value instanceof String)) return String.valueOf(value);
-        String s = ((String) value).replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
-        if (s.length() > 300) s = s.substring(0, 300) + "... (" + ((String) value).length() + " chars)";
-        return "\"" + s + "\"";
     }
 }
