@@ -49,10 +49,27 @@ public final class TerminalLog {
         onScreen(message, true);
     }
 
+    /**
+     * Like show(), but only in the campaign screen's message list, not in the mod's panel, which says the same its
+     * own way (e.g. "Sent to ...": the panel has its waiting line). Game thread only.
+     */
+    public void notice(String message) {
+        line(message);
+        onCampaignScreen(message, false);
+    }
+
     /** Does nothing outside a running campaign (the offline tests, the title screen). */
     private static void onScreen(String message, boolean failed) {
         try {
             if (screenListener != null) screenListener.shown(message, failed);
+        } catch (RuntimeException e) {
+            // The message is already in the terminal and the log; never let showing it break a command
+        }
+        onCampaignScreen(message, failed);
+    }
+
+    private static void onCampaignScreen(String message, boolean failed) {
+        try {
             if (Global.getSector() == null || Global.getSector().getCampaignUI() == null) return;
             if (failed) {
                 Global.getSector().getCampaignUI().addMessage(message, Misc.getNegativeHighlightColor());

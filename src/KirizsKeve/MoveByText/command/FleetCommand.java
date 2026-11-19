@@ -4,6 +4,7 @@ import KirizsKeve.MoveByText.game.FleetSpawner;
 import KirizsKeve.MoveByText.game.PlaceFinder;
 import KirizsKeve.MoveByText.game.TerminalLog;
 import com.fs.starfarer.api.Global;
+import com.fs.starfarer.api.campaign.FactionAPI;
 
 /**
  * One fleet the player asked for, e.g. <SPAWN:pirates:40>. Every provider answers with these as tags: the LLMs
@@ -44,6 +45,19 @@ public abstract class FleetCommand {
 
     /** Finds the places, spawns the fleet and reports what happened. Game thread only. */
     public abstract void execute(PlaceFinder places, FleetSpawner fleets);
+
+    /**
+     * The command in words, for the player to OK before it runs: "Pirate patrol of 40 FP, next to you". Game thread
+     * only (it asks the game for the faction's name).
+     */
+    public abstract String describe();
+
+    /** The faction's name as the game shows it ("Hegemony"), or its id when the game doesn't know it. */
+    protected static String factionName(String id) {
+        FactionAPI faction = Global.getSector() == null ? null : Global.getSector().getFaction(id);
+        String name = faction == null ? null : faction.getDisplayName();
+        return name == null || name.trim().isEmpty() ? id : name;
+    }
 
     /**
      * A spawn that threw: reported, so one bad command doesn't stop the others. The stack trace goes to the game's

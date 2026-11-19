@@ -53,6 +53,12 @@ public final class TradeCommand extends FleetCommand {
     }
 
     @Override
+    public String describe() {
+        return factionName(factionId()) + " trade convoy of " + points() + " FP to " + destination
+                + (origin != null ? ", from " + origin : ", from where you are");
+    }
+
+    @Override
     public void execute(PlaceFinder places, FleetSpawner fleets) {
         if (!factionExists()) return;
 

@@ -11,6 +11,9 @@ import org.apache.log4j.Logger;
 import org.json.JSONObject;
 import org.lwjgl.input.Keyboard;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * The mod's entry point (modPlugin in mod_info.json): on every game load it reads the settings again, gives the
  * CommandConsole a backend made from them and adds the editor panel to the campaign screen. So a change to
@@ -29,6 +32,10 @@ public class MoveByTextImpl extends BaseModPlugin {
      */
     private static CommandConsole console;
     private static int panelKey = DEFAULT_PANEL_KEY;
+    /** "panelPosition" from the settings; null for the default place. */
+    private static float[] startPosition;
+    /** The names the editor's Tab completes, read from the sector on every game load. */
+    private static List<String> completionNames = Collections.emptyList();
 
     @Override
     public void onGameLoad(boolean newGame) {
@@ -39,9 +46,26 @@ public class MoveByTextImpl extends BaseModPlugin {
             console = new CommandConsole(backend);
         } else {
             console.useBackend(backend); // a new backend starts with no history: another save, another conversation
+            console.dropPending(); // fleets waiting for an OK were meant for the save before
         }
-        panelKey = keyFor(new Settings(cfg).text("panelKey"));
+        Settings settings = new Settings(cfg);
+        console.setConfirmFirst(settings.flag("confirmBeforeSpawn", true));
+        panelKey = keyFor(settings.text("panelKey"));
+        startPosition = PanelPlacement.parse(settings.value("panelPosition"));
+        if (settings.value("panelPosition") != null && startPosition == null) {
+            LOG.warn("panelPosition in " + Settings.FILE + " is not \"x, y\" or [x, y]; using the default place");
+        }
+        completionNames = readCompletionNames();
         Global.getSector().addTransientScript(new CampaignMultiLineScreenPlugin());
+    }
+
+    private static List<String> readCompletionNames() {
+        try {
+            return SectorNames.completionNames();
+        } catch (RuntimeException e) {
+            LOG.warn("Could not read the names for Tab completion", e);
+            return Collections.emptyList();
+        }
     }
 
     /** The mod factions and places of this game, for the prompt and the NLU providers' word lists. */
@@ -121,7 +145,14 @@ public class MoveByTextImpl extends BaseModPlugin {
         @Override public void cancel() { MoveByTextImpl.cancel(); }
         @Override public String modelName() { return MoveByTextImpl.modelName(); }
         @Override public void clearHistory() { MoveByTextImpl.clearHistory(); }
+        @Override public List<String> pendingFleets() {
+            return console != null ? console.pendingFleets() : Collections.<String>emptyList();
+        }
+        @Override public void confirm() { if (console != null) console.confirm(); }
+        @Override public void discard() { if (console != null) console.discard(); }
+        @Override public List<String> completionNames() { return completionNames; }
         @Override public int panelKey() { return MoveByTextImpl.panelKey(); }
+        @Override public float[] startPosition() { return startPosition; }
         @Override public PanelState state() { return PANEL_STATE; }
     };
 

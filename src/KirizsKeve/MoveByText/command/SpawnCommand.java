@@ -36,6 +36,11 @@ public final class SpawnCommand extends FleetCommand {
     }
 
     @Override
+    public String describe() {
+        return factionName(factionId()) + " war fleet of " + points() + " FP, next to you";
+    }
+
+    @Override
     public void execute(PlaceFinder places, FleetSpawner fleets) {
         if (!factionExists()) return;
 

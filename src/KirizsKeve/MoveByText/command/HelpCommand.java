@@ -46,6 +46,12 @@ public final class HelpCommand extends FleetCommand {
     }
 
     @Override
+    public String describe() {
+        return (factionId() != null ? factionName(factionId()) : "The nearest friendly faction") + " sends " + points()
+                + " FP to defend " + target;
+    }
+
+    @Override
     public void execute(PlaceFinder places, FleetSpawner fleets) {
         if (factionId() != null && !factionExists()) return;
 

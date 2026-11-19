@@ -15,10 +15,6 @@ import static KirizsKeve.MoveByText.MoveByTextImpl.pollReply;
 
 public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
 
-    /** Where the panel goes, from the top left corner of the screen; moved up and left on a screen too small for that. */
-    private static final float PANEL_X = 450f;
-    private static final float PANEL_Y = 450f;
-
     /** Adding the panel is tried on this many frames; after that something is really wrong and it gives up. */
     private static final int MAX_INJECT_ATTEMPTS = 5;
 
@@ -26,6 +22,7 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
 
     private boolean injected = false;
     private int failedAttempts = 0;
+    private MultiLineTextFieldPanel panel;
 
     @Override
     public boolean isDone() {
@@ -42,8 +39,17 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
         // 1. Check if we are in the campaign state as per documentation
         if (Global.getSettings().getCurrentState() != GameState.CAMPAIGN) return;
         pollReply();
+        if (injected) {
+            // Off the screen while the UI is hidden (H), a dialog or menu is open, or a core tab (map, intel...)
+            boolean show = shouldShow(Global.getSector().getCampaignUI());
+            if (show != panel.isShown()) {
+                log.info("MoveByText panel " + (show ? "shown again" : "hidden while the campaign UI is hidden or covered"));
+                panel.setShown(show);
+            }
+            return;
+        }
         // 2. Inject the panel from advance, once
-        if (injected || failedAttempts >= MAX_INJECT_ATTEMPTS) return;
+        if (failedAttempts >= MAX_INJECT_ATTEMPTS) return;
 
         try {
             // 3. Access CampaignState.getScreenPanel() via reflection as outlined in 'The UI Tree' section
@@ -55,12 +61,15 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
             final UIPanelAPI screen = (UIPanelAPI) RolfLectionUtil.invokeMethodDirectly(getScreenPanelMethod, campaignState);
 
             // 4. Create the panel
-            MultiLineTextFieldPanel editorPanel = new MultiLineTextFieldPanel(MoveByTextImpl.host());
+            EditorHost host = MoveByTextImpl.host();
+            panel = new MultiLineTextFieldPanel(host);
 
-            // 5. Inject into the root panel
-            float x = Math.max(0f, Math.min(PANEL_X, Global.getSettings().getScreenWidth() - MultiLineTextFieldPanel.WIDTH));
-            float y = Math.max(0f, Math.min(PANEL_Y, Global.getSettings().getScreenHeight() - MultiLineTextFieldPanel.HEIGHT));
-            screen.addComponent(editorPanel.getPanel()).inTL(x, y);
+            // 5. Inject into the root panel: where it was dragged to, else panelPosition, else the left edge; on screen
+            float[] at = host.state().position != null ? host.state().position
+                    : host.startPosition() != null ? host.startPosition() : PanelPlacement.defaultTopLeft();
+            at = PanelPlacement.clamp(at[0], at[1], MultiLineTextFieldPanel.WIDTH, MultiLineTextFieldPanel.HEIGHT,
+                    Global.getSettings().getScreenWidth(), Global.getSettings().getScreenHeight());
+            panel.attachTo(screen, at[0], at[1]);
 
             injected = true;
         } catch (Exception e) {
@@ -69,5 +78,11 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
             log.error("Could not add the MoveByText editor to the campaign screen (attempt " + failedAttempts + " of "
                     + MAX_INJECT_ATTEMPTS + (givingUp ? ", giving up until the next game load" : "") + ")", e);
         }
+    }
+
+    /** Whether the panel belongs on the screen now: not while the UI is hidden or covered by a dialog, menu or tab. */
+    static boolean shouldShow(com.fs.starfarer.api.campaign.CampaignUIAPI ui) {
+        if (ui == null) return true;
+        return !ui.isHideUI() && !ui.isShowingDialog() && !ui.isShowingMenu() && ui.getCurrentCoreTab() == null;
     }
 }

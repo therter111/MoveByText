@@ -52,6 +52,28 @@ public final class SectorNames {
         return new GameNames(factions, places);
     }
 
+    /**
+     * The names the editor's Tab completes, as the game spells them: the factions of the intel tab (vanilla ones
+     * included: long name, short name and entity prefix), and the star systems, markets and stations.
+     */
+    public static List<String> completionNames() {
+        SectorAPI sector = Global.getSector();
+        Set<String> names = new LinkedHashSet<>();
+        for (FactionAPI faction : sector.getAllFactions()) {
+            if (faction == null || faction.isPlayerFaction() || !faction.isShowInIntelTab()) continue;
+            add(names, faction.getDisplayNameLong());
+            add(names, faction.getDisplayName());
+            add(names, faction.getEntityNamePrefix());
+        }
+        for (StarSystemAPI system : sector.getStarSystems()) add(names, system.getBaseName());
+        for (MarketAPI market : sector.getEconomy().getMarketsCopy()) {
+            if (market.isHidden()) continue;
+            add(names, market.getName());
+            if (market.getPrimaryEntity() != null) add(names, market.getPrimaryEntity().getName());
+        }
+        return new ArrayList<>(names);
+    }
+
     private static void add(java.util.Collection<String> to, String name) {
         if (name != null && !name.trim().isEmpty() && !to.contains(name.trim())) to.add(name.trim());
     }

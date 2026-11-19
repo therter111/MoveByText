@@ -9,6 +9,8 @@ import KirizsKeve.MoveByText.nlp.Backend;
 import com.fs.starfarer.api.Global;
 import org.apache.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -25,6 +27,10 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * One message at a time: while an answer is awaited the console is busy and refuses the next message, so impatient
  * clicks can't queue up minutes of requests. cancel() stops waiting; the answer is then ignored when it comes.
+ *
+ * With confirmFirst on ("confirmBeforeSpawn" in the settings), the fleets of an answer wait for the player's OK:
+ * they are described in words, and confirm() spawns them or discard() drops them. A misread message then costs a
+ * click, not an unwanted fleet in the save.
  */
 public final class CommandConsole {
 
@@ -59,11 +65,29 @@ public final class CommandConsole {
     private long cancelledUpTo = 0;
 
     private final CommandParser parser = new CommandParser();
-    private final PlaceFinder places = new PlaceFinder();
-    private final FleetSpawner fleets = new FleetSpawner();
+    private final PlaceFinder places;
+    private final FleetSpawner fleets;
+
+    /** Whether an answer's fleets wait for the player's OK. Game thread only. */
+    private boolean confirmFirst = false;
+    /** The fleets that wait for it, and the same in words; null when none do. Game thread only. */
+    private List<FleetCommand> pending;
+    private List<String> pendingWords = Collections.emptyList();
 
     public CommandConsole(Backend backend) {
+        this(backend, new PlaceFinder(), new FleetSpawner());
+    }
+
+    /** With the place lookup and the fleet maker given, for the offline tests. */
+    CommandConsole(Backend backend, PlaceFinder places, FleetSpawner fleets) {
         this.backend = backend;
+        this.places = places;
+        this.fleets = fleets;
+    }
+
+    /** Whether the fleets of an answer wait for the player's OK (see the class comment). */
+    public void setConfirmFirst(boolean confirmFirst) {
+        this.confirmFirst = confirmFirst;
     }
 
     /**
@@ -83,7 +107,8 @@ public final class CommandConsole {
         final Backend to = backend;
         final long id = lastId.incrementAndGet();
         waiting.put(id, System.nanoTime());
-        if (to.isConfigured()) screen.show("Sent to " + to.modelName() + ", waiting for the answer...");
+        // Only on the campaign screen: the panel has its own waiting line
+        if (to.isConfigured()) screen.notice("Sent to " + to.modelName() + ", waiting for the answer...");
         to.ask(text, new Backend.Callback() {
             @Override
             public void onResponse(String reply) {
@@ -160,10 +185,51 @@ public final class CommandConsole {
                     + " are carried out.");
             commands = commands.subList(0, MAX_COMMANDS_PER_REPLY);
         }
-        for (FleetCommand command : commands) {
-            command.execute(places, fleets);
+        if (commands.isEmpty()) return answer.text;
+        if (!confirmFirst) {
+            for (FleetCommand command : commands) command.execute(places, fleets);
+            return answer.text;
         }
+
+        if (pending != null) screen.show("The fleets that were waiting for your OK are dropped: a newer answer came.");
+        pending = new ArrayList<>(commands);
+        List<String> words = new ArrayList<>();
+        for (FleetCommand command : commands) {
+            words.add(command.describe());
+            screen.show("Ready: " + words.get(words.size() - 1));
+        }
+        pendingWords = Collections.unmodifiableList(words);
+        screen.show((commands.size() == 1 ? "Spawn it" : "Spawn them") + " or discard "
+                + (commands.size() == 1 ? "it" : "them") + " in the Fleet commands panel.");
         return answer.text;
+    }
+
+    /** The fleets that wait for the player's OK, in words; empty when none do. */
+    public List<String> pendingFleets() {
+        return pending == null ? Collections.<String>emptyList() : pendingWords;
+    }
+
+    /** Spawns the fleets that wait for the player's OK. Game thread only. */
+    public void confirm() {
+        if (pending == null) return;
+        List<FleetCommand> commands = pending;
+        pending = null;
+        pendingWords = Collections.emptyList();
+        for (FleetCommand command : commands) command.execute(places, fleets);
+    }
+
+    /** Drops the fleets that wait for the player's OK: nothing is spawned. Game thread only. */
+    public void discard() {
+        if (pending == null) return;
+        pending = null;
+        pendingWords = Collections.emptyList();
+        screen.show("Discarded: nothing was spawned.");
+    }
+
+    /** Drops them without a word, e.g. when another save is loaded: they were meant for the one before. */
+    public void dropPending() {
+        pending = null;
+        pendingWords = Collections.emptyList();
     }
 
     /**

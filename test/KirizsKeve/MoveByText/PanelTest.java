@@ -41,6 +41,13 @@ public class PanelTest {
         @Override public void clearHistory() { clears++; }
         @Override public int panelKey() { return Keyboard.KEY_F9; }
         @Override public PanelState state() { return state; }
+        final List<String> pending = new ArrayList<>();
+        int confirms = 0, discards = 0;
+        @Override public List<String> pendingFleets() { return pending; }
+        @Override public void confirm() { confirms++; pending.clear(); }
+        @Override public void discard() { discards++; pending.clear(); }
+        @Override public List<String> completionNames() { return java.util.Arrays.asList("Jangala", "Port Tse", "Hegemony"); }
+        @Override public float[] startPosition() { return null; }
     }
 
     /** The fake UI, a host and the panel made with them. */
