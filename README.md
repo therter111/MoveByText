@@ -18,14 +18,19 @@ Three things can be asked for:
 | Key or button | What it does |
 |---|---|
 | F8 | Opens and closes the editor. Another key can be set with `"panelKey"` in `llmdata.json`. |
-| Enter | Starts a new line of the message. |
-| Ctrl+Enter, Send | Sends the message. |
+| Enter, Send | Sends the message (Ctrl+Enter too). |
+| Shift+Enter | Starts a new line of the message. |
 | Up, Down | Bring back earlier messages, to send again or change. |
+| Tab | Completes a faction, star system, market or station name; Tab again gives the next one that fits. |
+| Esc | Closes the editor; what was typed stays for when it opens again. |
+| Spawn, Discard | Spawns the fleets of the last answer, or drops them. Without `"confirmBeforeSpawn": false` in `llmdata.json`, fleets wait for this. |
 | Cancel | Stops waiting for the answer; it is ignored when it comes. |
 | Forget chat | Starts a new conversation: the language model no longer sees the earlier messages. |
+| The grip right of the button | Drag it to move the panel. `"panelPosition"` in `llmdata.json` sets where it starts. |
 
 One message is sent at a time. While its answer is awaited, Send is off and the panel shows how long it has
-taken. The editor stays open, and the earlier messages stay available, when another save is loaded.
+taken. The editor stays open, and the conversation and earlier messages stay available, when another save is
+loaded. The panel is hidden while the campaign UI is (H), and while a dialog, menu or tab such as the map is open.
 
 The settings are read again on every game load. A change to `llmdata.json` or `systemPrompt.txt` shows after
 loading a save; the game doesn't have to be restarted.

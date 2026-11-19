@@ -7,6 +7,7 @@ import com.fs.starfarer.api.campaign.CustomUIPanelPlugin;
 import com.fs.starfarer.api.input.InputEventAPI;
 import com.fs.starfarer.api.ui.ButtonAPI;
 import com.fs.starfarer.api.ui.CustomPanelAPI;
+import com.fs.starfarer.api.ui.LabelAPI;
 import com.fs.starfarer.api.ui.PositionAPI;
 import com.fs.starfarer.api.ui.TextFieldAPI;
 import com.fs.starfarer.api.ui.TooltipMakerAPI;
@@ -48,10 +49,10 @@ final class FakeUi {
         TextFieldAPI api;
     }
 
-    /** One paragraph: the format and the arguments addPara got. */
+    /** One paragraph: the format and the arguments addPara got, or the text its label's setText got since. */
     static final class Para {
-        final String format;
-        final List<String> args;
+        String format;
+        List<String> args;
         final Color color;
 
         Para(String format, List<String> args, Color color) {
@@ -159,8 +160,16 @@ final class FakeUi {
                     List<String> highlights = args.length > 4 && args[4] instanceof String[]
                             ? Arrays.asList((String[]) args[4]) : Collections.<String>emptyList();
                     Color color = args.length > 2 && args[2] instanceof Color ? (Color) args[2] : null;
-                    t.paras.add(new Para((String) args[0], highlights, color));
-                    return null;
+                    Para p = new Para((String) args[0], highlights, color);
+                    t.paras.add(p);
+                    // The label shows the text setText gives it as it is, never as a format
+                    return FakeGame.deep(LabelAPI.class, "label",
+                            "setText", (FakeGame.Answer) a -> {
+                                p.format = "%s";
+                                p.args = Collections.singletonList((String) a[0]);
+                                return null;
+                            },
+                            "getText", (FakeGame.Answer) a -> p.text());
                 });
         tooltips.add(t);
         return t;
@@ -230,20 +239,21 @@ final class FakeUi {
         final InputEventAPI api;
         boolean consumed = false;
 
-        Key(int key, boolean ctrl) {
+        Key(int key, boolean ctrl, boolean shift) {
             api = FakeGame.fake(InputEventAPI.class, "key " + key,
                     "isKeyboardEvent", true,
                     "isKeyDownEvent", true,
                     "getEventValue", key,
                     "isCtrlDown", ctrl,
+                    "isShiftDown", shift,
                     "consume", (FakeGame.Answer) a -> consumed = true,
                     "isConsumed", (FakeGame.Answer) a -> consumed);
         }
     }
 
     /** Hands one key press to the plugin; returns it, to ask whether it was consumed. */
-    static Key press(CustomUIPanelPlugin plugin, int key, boolean ctrl) {
-        Key k = new Key(key, ctrl);
+    static Key press(CustomUIPanelPlugin plugin, int key, boolean ctrl, boolean shift) {
+        Key k = new Key(key, ctrl, shift);
         plugin.processInput(Collections.singletonList(k.api));
         return k;
     }

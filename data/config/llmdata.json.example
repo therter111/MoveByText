@@ -68,5 +68,15 @@
 
   # ---- The panel on the campaign screen ----
   # The key that opens and closes it (an LWJGL key name: F8, F9, INSERT, GRAVE, ...). Optional, default F8.
-  "panelKey": "F8"
+  "panelKey": "F8",
+
+  # Where it starts: its top left corner, in pixels from the screen's top left, as "x, y" or [x, y]. Optional,
+  # default the left edge under the top bar. Once it is dragged by the grip next to its button, it stays where it
+  # was dragged to until the game is closed.
+  "panelPosition": "20, 120",
+
+  # true = the fleets of an answer are first described in the panel and only spawn when you press Spawn (Discard
+  # drops them), so a misread message costs a click, not an unwanted fleet. false = they spawn straight away.
+  # Optional, default true.
+  "confirmBeforeSpawn": true
 }

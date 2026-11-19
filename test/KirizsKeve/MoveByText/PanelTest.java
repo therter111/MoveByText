@@ -12,7 +12,7 @@ import static KirizsKeve.MoveByText.Check.*;
 
 /**
  * Offline tests for the editor panel (MultiLineTextFieldPanel): the toggle button and its key, typing (Enter,
- * Backspace, Up, Down, Ctrl+Enter), Send, Cancel and Forget chat, the waiting state, and what the conversation shows.
+ * Shift+Enter, Backspace, Up, Down), Send, Cancel and Forget chat, the waiting state, and what the conversation shows.
  * FakeUi stands in for the game's UI and a fake EditorHost for the console. What the game draws (GL11) and real
  * keyboard focus can only be seen in the game.
  *
@@ -84,7 +84,14 @@ public class PanelTest {
         }
 
         FakeUi.Key press(int key, boolean ctrl) {
-            FakeUi.Key k = FakeUi.press(editor(), key, ctrl);
+            FakeUi.Key k = FakeUi.press(editor(), key, ctrl, false);
+            editor().advance(0.1f);
+            return k;
+        }
+
+        /** The key with Shift held, e.g. Shift+Enter for a new line. */
+        FakeUi.Key shiftPress(int key) {
+            FakeUi.Key k = FakeUi.press(editor(), key, false, true);
             editor().advance(0.1f);
             return k;
         }
@@ -129,7 +136,8 @@ public class PanelTest {
 
         test("typing: the conversation starts with how to use it", u -> {
             u.open();
-            has(u.ui.logText(), "Type an order for a fleet below. Enter starts a new line", "help line");
+            has(u.ui.logText(), "Type an order for a fleet below and press Enter to send it. Shift+Enter starts a new"
+                    + " line", "help line");
         });
 
         test("typing: keys only count while the field has the keyboard", u -> {
@@ -142,15 +150,16 @@ public class PanelTest {
             same("spawn pirates", u.ui.field().text, "the text stays");
         });
 
-        test("typing: Enter moves the line up as a draft, Backspace on an empty field takes it back", u -> {
+        test("typing: Shift+Enter moves the line up as a draft, Backspace on an empty field takes it back", u -> {
             u.open();
             u.type("spawn a small");
-            check(u.press(Keyboard.KEY_RETURN, false).consumed, "Enter taken");
+            check(u.shiftPress(Keyboard.KEY_RETURN).consumed, "Shift+Enter taken");
+            same(0, u.host.sent.size(), "nothing sent");
             same("", u.ui.field().text, "the field is empty again");
-            has(u.ui.logText(), "Not sent yet:\nspawn a small", "the draft shows");
+            has(u.ui.logText(), "Your message so far (Enter sends it):\nspawn a small", "the draft shows");
             check(u.press(Keyboard.KEY_BACK, false).consumed, "Backspace taken");
             same("spawn a small", u.ui.field().text, "the line is back in the field");
-            check(!u.ui.logText().contains("Not sent yet"), "no draft left: " + u.ui.logText());
+            check(!u.ui.logText().contains("Your message so far"), "no draft left: " + u.ui.logText());
         });
 
         test("typing: Backspace with text in the field is left to the field", u -> {
@@ -163,16 +172,23 @@ public class PanelTest {
         // Sending
         // ------------------------------------------------------------------------------------------
 
-        test("send: Ctrl+Enter sends every line, shows them and empties the editor", u -> {
+        test("send: Enter sends every line, shows them and empties the editor", u -> {
             u.open();
             u.type("spawn a small");
-            u.press(Keyboard.KEY_RETURN, false);
+            u.shiftPress(Keyboard.KEY_RETURN);
             u.type("pirate fleet");
-            check(u.press(Keyboard.KEY_RETURN, true).consumed, "Ctrl+Enter taken");
+            check(u.press(Keyboard.KEY_RETURN, false).consumed, "Enter taken");
             same(Collections.singletonList("spawn a small\npirate fleet"), u.host.sent, "sent");
             same("", u.ui.field().text, "field emptied");
             has(u.ui.logText(), "> spawn a small\n> pirate fleet", "shown as sent");
-            check(!u.ui.logText().contains("Not sent yet"), "no draft left");
+            check(!u.ui.logText().contains("Your message so far"), "no draft left");
+        });
+
+        test("send: Ctrl+Enter sends too, as it did before Enter did", u -> {
+            u.open();
+            u.type("spawn pirates");
+            check(u.press(Keyboard.KEY_RETURN, true).consumed, "Ctrl+Enter taken");
+            same(Collections.singletonList("spawn pirates"), u.host.sent, "sent");
         });
 
         test("send: the Send button does the same, and nothing happens with nothing written", u -> {
@@ -188,14 +204,14 @@ public class PanelTest {
             u.open();
             u.host.accepts = false;
             u.type("spawn pirates");
-            u.press(Keyboard.KEY_RETURN, true);
+            u.press(Keyboard.KEY_RETURN, false);
             has(u.ui.logText(), "Not sent: the mod isn't ready yet.", "note");
         });
 
         test("send: a % the player types is shown as typed, never used as a format", u -> {
             u.open();
             u.type("100% of the pirates, %s %d");
-            u.press(Keyboard.KEY_RETURN, true);
+            u.press(Keyboard.KEY_RETURN, false);
             boolean found = false;
             for (FakeUi.Para p : u.ui.log()) {
                 same("%s", p.format, "every paragraph's format");
@@ -228,11 +244,11 @@ public class PanelTest {
             check(!u.ui.logText().contains("Waiting for"), "no waiting line: " + u.ui.logText());
         });
 
-        test("busy: Ctrl+Enter keeps the text and only says why", u -> {
+        test("busy: Enter keeps the text and only says why", u -> {
             u.open();
             u.host.busy = true;
             u.type("spawn pirates");
-            u.press(Keyboard.KEY_RETURN, true);
+            u.press(Keyboard.KEY_RETURN, false);
             same(0, u.host.sent.size(), "nothing sent");
             same("spawn pirates", u.ui.field().text, "the text stays");
             has(u.ui.logText(), "Still waiting for the answer to the last message", "note");
@@ -254,7 +270,7 @@ public class PanelTest {
             u.open();
             for (String m : new String[]{"one", "two"}) {
                 u.type(m);
-                u.press(Keyboard.KEY_RETURN, true);
+                u.press(Keyboard.KEY_RETURN, false);
             }
             u.press(Keyboard.KEY_UP, false);
             same("two", u.ui.field().text, "Up");
@@ -269,7 +285,7 @@ public class PanelTest {
         test("history: the sent messages are the host's, so they outlive the panel", u -> {
             u.open();
             u.type("from before the load");
-            u.press(Keyboard.KEY_RETURN, true);
+            u.press(Keyboard.KEY_RETURN, false);
             new MultiLineTextFieldPanel(u.host); // the panel made again after a save load
             u.ui.field().focus = true;
             u.press(Keyboard.KEY_UP, false);
@@ -279,7 +295,7 @@ public class PanelTest {
         test("Forget chat: the conversation is cleared and the console forgets it too", u -> {
             u.open();
             u.type("spawn pirates");
-            u.press(Keyboard.KEY_RETURN, true);
+            u.press(Keyboard.KEY_RETURN, false);
             u.ui.click(u.ui.button("Forget chat"));
             u.editor().advance(0.1f);
             same(1, u.host.clears, "clearHistory() calls");
