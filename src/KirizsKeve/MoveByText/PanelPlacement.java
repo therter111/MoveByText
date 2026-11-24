@@ -3,9 +3,10 @@ package KirizsKeve.MoveByText;
 import org.json.JSONArray;
 
 /**
- * Where the panel goes on the screen: by default the left edge under the campaign screen's top bar, out of the way
- * of the player's fleet in the middle of the map; or "panelPosition" from the settings; always kept on the screen.
- * Positions are the panel's top left corner, in screen pixels from the screen's top left, as inTL takes them.
+ * Where the panel goes on the screen and how big it is: by default the left edge under the campaign screen's top
+ * bar, out of the way of the player's fleet in the middle of the map; or "panelPosition" from the settings; always
+ * kept on the screen. Positions are the panel's top left corner, in screen pixels from the screen's top left, as
+ * inTL takes them. Sizes ("panelSize", or dragged by the corner) are kept between a smallest size and the screen.
  */
 final class PanelPlacement {
 
@@ -28,7 +29,21 @@ final class PanelPlacement {
                 Math.max(0f, Math.min(y, screenHeight - panelHeight))};
     }
 
-    /** "panelPosition" as the settings may have it: "x, y" or [x, y]; null when it is missing or not two numbers. */
+    /**
+     * A size kept between the smallest one the panel's layout needs and the screen; the smallest wins on a screen
+     * too small for it.
+     */
+    static float[] clampSize(float width, float height, float minWidth, float minHeight, float screenWidth,
+                             float screenHeight) {
+        return new float[]{
+                Math.max(minWidth, Math.min(width, screenWidth)),
+                Math.max(minHeight, Math.min(height, screenHeight))};
+    }
+
+    /**
+     * "panelPosition" or "panelSize" as the settings may have it: "x, y" or [x, y]; null when it is missing or not
+     * two numbers.
+     */
     static float[] parse(Object value) {
         double[] xy = null;
         if (value instanceof JSONArray) {

@@ -45,6 +45,15 @@ interface EditorHost {
     /** "panelPosition" from the settings, the top left corner the panel starts at; null for the default. */
     float[] startPosition();
 
+    /** "panelSize" from the settings, the width and height the panel starts with; null for the default. */
+    float[] startSize();
+
+    /** The text on the system clipboard, for Ctrl+V; empty when there is none or it can't be read. */
+    String readClipboard();
+
+    /** Puts text on the system clipboard, for Ctrl+C and Ctrl+X; false when that didn't work. */
+    boolean writeClipboard(String text);
+
     /** What the panel keeps when a save is loaded and it is made again. */
     PanelState state();
 }

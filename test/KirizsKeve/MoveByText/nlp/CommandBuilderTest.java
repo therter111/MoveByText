@@ -249,6 +249,49 @@ public class CommandBuilderTest {
             same(2000.0, NumberWords.parse("two thousand"), "thousand");
             same(null, NumberWords.parse("a big fleet"), "no number");
         });
+
+        test("NumberWords: scales, decimals and signs; number words inside other words don't count", () -> {
+            same(125.0, NumberWords.parse("a hundred and twenty-five"), "a hundred and ...");
+            same(1200.0, NumberWords.parse("one thousand two hundred ships"), "thousand, then hundreds");
+            same(1100.0, NumberWords.parse("eleven hundred"), "eleven hundred");
+            same(0.0, NumberWords.parse("zero"), "zero is a number");
+            same(150.6, NumberWords.parse("150.6 points"), "a decimal");
+            same(-50.0, NumberWords.parse("-50"), "negative");
+            same(40.0, NumberWords.parse("two fleets of 40"), "digits win over words, wherever they are");
+            for (String none : new String[]{"someone", "an hour", "nonetheless", "often", "", null}) {
+                same(null, NumberWords.parse(none), "parse(" + show(none) + ")");
+            }
+        });
+
+        test("SizeWords.tier: whole words only, in any case and with any punctuation; the longest phrase wins", () -> {
+            same(150, SizeWords.tier("BIG!"), "capitals and punctuation");
+            same(100, SizeWords.tier("a mid-sized fleet"), "a hyphen");
+            same(225, SizeWords.tier("a very-large fleet"), "\"very large\", not \"large\"");
+            same(225, SizeWords.tier("a very big one"), "\"very big\", not \"big\"");
+            same(15, SizeWords.tier("not the smallest"), "\"smallest\", not \"small\"");
+            for (String none : new String[]{"smallpox", "bigotry", "a minimalist", "somewhere", "maxed out", "", null}) {
+                same(null, SizeWords.tier(none), "tier(" + show(none) + ")");
+            }
+        });
+
+        test("SizeWords: percents up or down, \"N times\", and the sign of an offset", () -> {
+            same(0.5, SizeWords.multiplier("50% smaller"), "50% smaller");
+            same(0.75, SizeWords.multiplier("25 per cent weaker"), "per cent, weaker");
+            same(1.25, SizeWords.multiplier("25 percent more"), "more");
+            same(0.5, SizeWords.multiplier("50 percent"), "a percent of it");
+            same(5.0, SizeWords.multiplier("five times"), "five times");
+            same(10.0, SizeWords.multiplier("10 times"), "10 times");
+            same(0.75, SizeWords.multiplier("three quarters of"), "three quarters");
+            same(4.0, SizeWords.multiplier("quadruple"), "quadruple");
+            same(null, SizeWords.multiplier("bigger"), "no amount");
+
+            same(30.0, SizeWords.offset("plus 30"), "plus");
+            same(30.0, SizeWords.offset("30 more points"), "more");
+            same(-20.0, SizeWords.offset("take off 20"), "take off");
+            same(-15.0, SizeWords.offset("-15"), "a minus sign");
+            same(-10.0, SizeWords.offset("ten fewer"), "fewer, in words");
+            same(null, SizeWords.offset("a bit more"), "no number");
+        });
     }
 
     // ------------------------------------------------------------------------------------------

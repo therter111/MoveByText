@@ -67,7 +67,7 @@ public class CampaignMultiLineScreenPlugin implements EveryFrameScript {
             // 5. Inject into the root panel: where it was dragged to, else panelPosition, else the left edge; on screen
             float[] at = host.state().position != null ? host.state().position
                     : host.startPosition() != null ? host.startPosition() : PanelPlacement.defaultTopLeft();
-            at = PanelPlacement.clamp(at[0], at[1], MultiLineTextFieldPanel.WIDTH, MultiLineTextFieldPanel.HEIGHT,
+            at = PanelPlacement.clamp(at[0], at[1], panel.width(), panel.height(),
                     Global.getSettings().getScreenWidth(), Global.getSettings().getScreenHeight());
             panel.attachTo(screen, at[0], at[1]);
 

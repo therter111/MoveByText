@@ -19,14 +19,23 @@ Three things can be asked for:
 |---|---|
 | F8 | Opens and closes the editor. Another key can be set with `"panelKey"` in `llmdata.json`. |
 | Enter, Send | Sends the message (Ctrl+Enter too). |
-| Shift+Enter | Starts a new line of the message. |
-| Up, Down | Bring back earlier messages, to send again or change. |
-| Tab | Completes a faction, star system, market or station name; Tab again gives the next one that fits. |
-| Esc | Closes the editor; what was typed stays for when it opens again. |
+| Shift+Enter | Starts a new line of the message. Long lines wrap in the box; past five lines it scrolls. |
+| Arrows, Home, End | Move the cursor: by a word with Ctrl, to the start or end of the message with Ctrl+Home and Ctrl+End. Shift selects. |
+| Ctrl+Up, Ctrl+Down | Bring back earlier messages, to send again or change. After the newest, what you were writing comes back. |
+| Backspace, Delete | Delete a character, or a word with Ctrl. |
+| Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V | Select all, copy, cut, paste. |
+| Mouse in the box | Click puts the cursor there, drag or Shift+click selects, double click selects a word, the wheel scrolls. |
+| Tab | Completes the faction, star system, market or station name before the cursor; Tab again gives the next one that fits. |
+| Esc | Closes the editor; what was typed stays for when it opens again, also after loading another save. |
+| Clear | Empties the box. The count right of the buttons shows how much of the 1000 characters a message may have is used. |
 | Spawn, Discard | Spawns the fleets of the last answer, or drops them. Without `"confirmBeforeSpawn": false` in `llmdata.json`, fleets wait for this. |
 | Cancel | Stops waiting for the answer; it is ignored when it comes. |
 | Forget chat | Starts a new conversation: the language model no longer sees the earlier messages. |
 | The grip right of the button | Drag it to move the panel. `"panelPosition"` in `llmdata.json` sets where it starts. |
+| The editor's bottom right corner | Drag it to resize the panel (at least 700 x 300). `"panelSize"` in `llmdata.json` sets the size it starts with. |
+
+While you type in the box, the keys are the editor's, so the game's hotkeys (space, I, M...) do nothing. Click the
+map to give the keys back to the game.
 
 One message is sent at a time. While its answer is awaited, Send is off and the panel shows how long it has
 taken. The editor stays open, and the conversation and earlier messages stay available, when another save is
@@ -106,8 +115,9 @@ IntelliJ, with the mod folder as the working directory:
 
 | Suite | What it checks |
 |---|---|
-| `CommandParserTest`, `CommandBuilderTest` | Reading command tags, and turning NLU answers into them |
-| `CommandConsoleTest`, `ComposerTest`, `PanelTest` | One message at a time, Cancel, swapping the backend; the panel: toggle and hotkey, typing, Send/Cancel while busy, the waiting line, Up/Down, Forget chat |
+| `CommandParserTest`, `CommandBuilderTest` | Reading command tags, describing them in words, and turning NLU answers into them; the size and number words |
+| `CommandConsoleTest`, `ComposerTest`, `PanelTest` | One message at a time, Cancel, swapping the backend, at most 10 commands a reply, fleets that wait for Spawn or Discard; Send and Ctrl+Up/Down through earlier messages; the panel: toggle, hotkey and its "*", the keys and the mouse in the box, the clipboard, the count, Send/Cancel while busy, the waiting line, Tab, Esc, Clear, Spawn/Discard, Forget chat, its size, moving and resizing it, when it is shown |
+| `TextEditorTest`, `NameCompleterTest`, `PanelPlacementTest` | How the box wraps the text and what every editing key does to the text, the cursor and the selection; which name Tab completes to; reading `panelPosition` and `panelSize` and keeping the panel on the screen |
 | `SettingsTest`, `GameLoadTest` | Where the prompt comes from, mod factions in it, the settings read again on every game load, `panelKey` |
 | `PlaceFinderTest`, `SectorNamesTest` | Which place a name means; which factions and places of the sector reach the NLP side |
 | `CommandFailureTest`, `FleetSpawnerTest` | Every way a command fails; what SPAWN, TRADE and HELP ask the game for, where the fleet goes, its orders and flags, which market sends help |
@@ -122,5 +132,6 @@ generator, `nlu_data.py`, the evaluation scripts' helpers, a syntax check of eve
 `nlp/spacy/test_distance.py`, which checks the Python copy of `distance()` against the same table as Java.
 `LlmPromptTest` sends real requests to the configured provider.
 
-Still only testable in the game: `FleetFactoryV3` filling a fleet with ships, what the panel draws and real keyboard
-focus, and whether the game caches `llmdata.json` and `systemPrompt.txt` between loads.
+Still only testable in the game: `FleetFactoryV3` filling a fleet with ships, what the panel draws (the box's text,
+cursor and selection), real keyboard focus and key repeat, the system clipboard, and whether the game caches
+`llmdata.json` and `systemPrompt.txt` between loads.

@@ -75,6 +75,10 @@
   # was dragged to until the game is closed.
   "panelPosition": "20, 120",
 
+  # Its size with the editor open, width and height in pixels, as "width, height" or [width, height]. Optional,
+  # default 720, 435; at least 700, 300. Dragging the editor's bottom right corner resizes it until the game is closed.
+  "panelSize": "720, 435",
+
   # true = the fleets of an answer are first described in the panel and only spawn when you press Spawn (Discard
   # drops them), so a misread message costs a click, not an unwanted fleet. false = they spawn straight away.
   # Optional, default true.

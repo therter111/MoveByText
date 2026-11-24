@@ -34,6 +34,8 @@ public class MoveByTextImpl extends BaseModPlugin {
     private static int panelKey = DEFAULT_PANEL_KEY;
     /** "panelPosition" from the settings; null for the default place. */
     private static float[] startPosition;
+    /** "panelSize" from the settings; null for the default size. */
+    private static float[] startSize;
     /** The names the editor's Tab completes, read from the sector on every game load. */
     private static List<String> completionNames = Collections.emptyList();
 
@@ -54,6 +56,10 @@ public class MoveByTextImpl extends BaseModPlugin {
         startPosition = PanelPlacement.parse(settings.value("panelPosition"));
         if (settings.value("panelPosition") != null && startPosition == null) {
             LOG.warn("panelPosition in " + Settings.FILE + " is not \"x, y\" or [x, y]; using the default place");
+        }
+        startSize = PanelPlacement.parse(settings.value("panelSize"));
+        if (settings.value("panelSize") != null && startSize == null) {
+            LOG.warn("panelSize in " + Settings.FILE + " is not \"width, height\" or [width, height]; using the default size");
         }
         completionNames = readCompletionNames();
         Global.getSector().addTransientScript(new CampaignMultiLineScreenPlugin());
@@ -153,6 +159,9 @@ public class MoveByTextImpl extends BaseModPlugin {
         @Override public List<String> completionNames() { return completionNames; }
         @Override public int panelKey() { return MoveByTextImpl.panelKey(); }
         @Override public float[] startPosition() { return startPosition; }
+        @Override public float[] startSize() { return startSize; }
+        @Override public String readClipboard() { return SystemClipboard.read(); }
+        @Override public boolean writeClipboard(String text) { return SystemClipboard.write(text); }
         @Override public PanelState state() { return PANEL_STATE; }
     };
 

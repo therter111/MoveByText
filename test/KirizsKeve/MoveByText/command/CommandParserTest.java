@@ -1,6 +1,7 @@
 package KirizsKeve.MoveByText.command;
 
 import KirizsKeve.MoveByText.TestSuite;
+import KirizsKeve.MoveByText.game.FakeGame;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,9 +9,9 @@ import java.util.List;
 import static KirizsKeve.MoveByText.Check.*;
 
 /**
- * Offline tests for the fleet commands: reading tags out of a provider's reply (CommandParser), and writing them
- * (toTag), which CommandBuilder uses for the NLU providers. Carrying a command out needs a running game, so
- * execute() is not tested here.
+ * Offline tests for the fleet commands: reading tags out of a provider's reply (CommandParser), writing them
+ * (toTag), which CommandBuilder uses for the NLU providers, and describing them in words (describe), which the player
+ * reads before OKing the fleets. Carrying a command out is tested in CommandFailureTest and FleetSpawnerTest.
  *
  * Run main() from IntelliJ, or every offline suite with AllOfflineTests. Pass a word to run only the tests whose name
  * contains it. Exits with 1 on any failure.
@@ -113,6 +114,48 @@ public class CommandParserTest {
                 same(command.getClass(), back.get(0).getClass(), "kind of " + command.toTag());
                 same(command.toTag(), back.get(0).toTag(), "tag");
             }
+        });
+    }
+
+    static {
+        // ------------------------------------------------------------------------------------------
+        // describe(): the words the player OKs
+        // ------------------------------------------------------------------------------------------
+
+        test("describe: each kind in words; outside a game the faction's id stands for its name", () -> {
+            same("pirates war fleet of 40 FP, next to you", new SpawnCommand("pirates", 40).describe(), "spawn");
+            same("independent trade convoy of 100 FP to Jangala, from where you are",
+                    new TradeCommand("independent", 100, "Jangala", null).describe(), "trade from the player");
+            same("independent trade convoy of 100 FP to Jangala, from Askonia",
+                    new TradeCommand("independent", 100, "Jangala", "Askonia").describe(), "trade from a named place");
+            same("The nearest friendly faction sends 150 FP to defend Jangala", new HelpCommand(null, 150, "Jangala").describe(),
+                    "help from whoever is near");
+            same("hegemony sends 150 FP to defend Jangala", new HelpCommand("hegemony", 150, "Jangala").describe(),
+                    "help from a named faction");
+        });
+
+        test("describe: the faction's name as the game shows it; its id when the game has none or a blank one", () -> {
+            FakeGame.World world = new FakeGame.World();
+            world.faction("sindrian_diktat", "Diktat", "Sindrian Diktat", "Sindrian", true);
+            world.faction("mod_blank", "  ", "", "", true);
+            world.install();
+            try {
+                same("Diktat war fleet of 40 FP, next to you", new SpawnCommand("sindrian_diktat", 40).describe(), "display name");
+                same("Diktat trade convoy of 50 FP to Askonia, from where you are",
+                        new TradeCommand("sindrian_diktat", 50, "Askonia", null).describe(), "trade");
+                same("Diktat sends 150 FP to defend Sindria", new HelpCommand("sindrian_diktat", 150, "Sindria").describe(), "help");
+                same("klingons war fleet of 40 FP, next to you", new SpawnCommand("klingons", 40).describe(),
+                        "a faction the game doesn't have");
+                same("mod_blank war fleet of 40 FP, next to you", new SpawnCommand("mod_blank", 40).describe(), "a blank name");
+            } finally {
+                FakeGame.uninstall();
+            }
+        });
+
+        test("describe: the size and the places are the command's own, as clamped and trimmed when it was read", () -> {
+            same("pirates war fleet of 300 FP, next to you", parse("<SPAWN:pirates:9000>").get(0).describe(), "clamped size");
+            same("independent trade convoy of 50 FP to Port Tse, from Jangala",
+                    parse("<TRADE:independent:50: Port Tse : Jangala >").get(0).describe(), "trimmed places");
         });
     }
 

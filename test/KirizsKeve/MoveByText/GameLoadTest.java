@@ -169,6 +169,33 @@ public class GameLoadTest {
             String name = example.getString("panelKey");
             check(Keyboard.getKeyIndex(name.toUpperCase()) != Keyboard.KEY_NONE, show(name) + " is an LWJGL key name");
         });
+
+        // ------------------------------------------------------------------------------------------
+        // Where the panel starts, and how big
+        // ------------------------------------------------------------------------------------------
+
+        test("panelPosition and panelSize: read on every load; unreadable or missing ones give the defaults", f -> {
+            f.settings(gemini("m", ",\n  \"panelPosition\": [30, 140],\n  \"panelSize\": \"900, 500\""));
+            f.prompt("Prompt.");
+            f.install(true);
+            new MoveByTextImpl().onGameLoad(false);
+            same("[30.0, 140.0]", java.util.Arrays.toString(MoveByTextImpl.host().startPosition()), "panelPosition");
+            same("[900.0, 500.0]", java.util.Arrays.toString(MoveByTextImpl.host().startSize()), "panelSize");
+
+            f.settings(gemini("m", ",\n  \"panelSize\": \"big\""));
+            new MoveByTextImpl().onGameLoad(false);
+            same(null, MoveByTextImpl.host().startSize(), "an unreadable panelSize");
+            same(null, MoveByTextImpl.host().startPosition(), "no panelPosition any more");
+        });
+
+        test("panelPosition and panelSize: the example settings' are readable, and its size is the default one", f -> {
+            JSONObject example = LlmPromptTest.readConfig(java.nio.file.Paths.get("data/config/llmdata.json.example"));
+            check(PanelPlacement.parse(example.get("panelPosition")) != null, "panelPosition " + show(example.get("panelPosition")));
+            float[] size = PanelPlacement.parse(example.get("panelSize"));
+            check(size != null, "panelSize " + show(example.get("panelSize")));
+            same(MultiLineTextFieldPanel.DEFAULT_WIDTH + ", " + MultiLineTextFieldPanel.DEFAULT_HEIGHT, size[0] + ", " + size[1],
+                    "the example shows the default size");
+        });
     }
 
     public static void main(String[] args) {
